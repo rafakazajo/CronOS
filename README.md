@@ -1,1 +1,2 @@
 # CronOS
+## Rafael Caro Amanbayev
