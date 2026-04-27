@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CronOS - Interfaz de Voz</title>
+    <link href="https://cdn.jsdelivr.net/npm/comic-mono@0.0.1/index.css" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --bg-color: #0f0f0f;
+            --chat-bg: #1a1a1a;
+            --header-bg: #232323;
+            --user-msg: #2b3a42;
+            --cronos-msg: #2a2a2a;
+            
+            --core-reposo: #AEC6CF;    
+            --core-escuchar: #800080;  
+            --core-pensar: #4CBB17;    
+            --core-hablar: #FFC0CB;    
+        }
+
+        body {
+            font-family: 'Comic Mono', monospace;
+            background-color: var(--bg-color);
+            color: #e0e0e0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .chat-container {
+            width: 100%;
+            max-width: 600px;
+            background: var(--chat-bg);
+            border-radius: 12px;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.8);
+            display: flex;
+            flex-direction: column;
+            height: 85vh;
+            overflow: hidden;
+            border: 1px solid #333;
+        }
+
+        /* --- HEADER, LOGO Y NÚCLEO --- */
+        .header {
+            background: var(--header-bg);
+            padding: 15px 20px;
+            font-weight: bold;
+            font-size: 1.1rem;
+            letter-spacing: 1px;
+            border-bottom: 1px solid #333;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            text-transform: uppercase;
+            position: relative;
+        }
+
+        .logo-cronos {
+            position: absolute;
+            left: 20px;
+            top: 50%;
+            height: 35px;
+            width: 35px; 
+            object-fit: contain; 
+            filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.4));
+            animation: flotar-esquina 4s ease-in-out infinite;
+        }
+
+        @keyframes flotar-esquina {
+            0%, 100% { transform: translateY(-50%); }
+            50% { transform: translateY(calc(-50% - 3px)); }
+        }
+
+        .status-dot {
+            width: 14px; height: 14px; border-radius: 50%; transition: background-color 0.3s ease;
+            position: relative; flex-shrink: 0; 
+        }
+
+        .status-dot.reposo { background-color: var(--core-reposo); animation: anim-reposo 3s infinite ease-in-out; }
+        .status-dot.escuchando { background-color: var(--core-escuchar); animation: anim-escuchar 0.6s infinite alternate; }
+        .status-dot.hablando { background-color: var(--core-hablar); animation: anim-hablar 0.2s infinite alternate; }
+
+        .status-dot.pensando { background-color: var(--core-pensar); }
+        .status-dot.pensando::before, .status-dot.pensando::after {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            border-radius: 50%; background-color: var(--core-pensar);
+            animation: ondas-expansivas 1.5s infinite cubic-bezier(0.1, 0.8, 0.3, 1);
+            z-index: 1;
+        }
+        .status-dot.pensando::after { animation-delay: 0.75s; }
+
+        @keyframes ondas-expansivas { 0% { transform: scale(1); opacity: 0.8; } 100% { transform: scale(3.5); opacity: 0; } }
+        @keyframes anim-reposo { 0%, 100% { transform: scale(1); box-shadow: 0 0 5px var(--core-reposo); } 50% { transform: scale(1.1); box-shadow: 0 0 10px var(--core-reposo); } }
+        @keyframes anim-escuchar { 0% { transform: scale(1); box-shadow: 0 0 10px var(--core-escuchar); } 100% { transform: scale(1.5); box-shadow: 0 0 25px var(--core-escuchar), 0 0 40px var(--core-escuchar); } }
+        @keyframes anim-hablar { 0% { transform: scale(1.1); box-shadow: 0 0 15px var(--core-hablar), 0 0 20px var(--core-hablar); } 100% { transform: scale(1.4); box-shadow: 0 0 30px var(--core-hablar), 0 0 50px var(--core-hablar); } }
+
+        /* --- ECUALIZADOR --- */
+        .equalizer { display: none; height: 18px; gap: 3px; align-items: flex-end; margin-left: 5px; flex-shrink: 0; }
+        .equalizer.activo { display: flex; }
+        .equalizer span { width: 4px; background-color: var(--core-hablar); border-radius: 2px; animation: eq-play 0.4s infinite alternate ease-in-out; box-shadow: 0 0 8px var(--core-hablar); }
+        .equalizer span:nth-child(1) { animation-duration: 0.3s; }
+        .equalizer span:nth-child(2) { animation-duration: 0.5s; height: 100%; }
+        .equalizer span:nth-child(3) { animation-duration: 0.4s; }
+        .equalizer span:nth-child(4) { animation-duration: 0.6s; }
+        .equalizer span:nth-child(5) { animation-duration: 0.35s; }
+        @keyframes eq-play { 0% { height: 4px; } 100% { height: 18px; } }
+
+        /* --- ZONA DE CHAT --- */
+        .chat-box { flex: 1; padding: 25px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; scroll-behavior: smooth; }
+        .mensaje {
+            max-width: 85%; padding: 16px 20px; border-radius: 12px; line-height: 1.5; font-size: 1rem;
+            animation: deslizarArriba 0.4s cubic-bezier(0.25, 0.8, 0.25, 1) forwards; opacity: 0; transform: translateY(15px);
+            word-wrap: break-word;
+        }
+        @keyframes deslizarArriba { to { opacity: 1; transform: translateY(0); } }
+        .mensaje.usuario { background: var(--user-msg); align-self: flex-end; border-bottom-right-radius: 2px; border: 1px solid #3a4a52; }
+        .mensaje.cronos { background: var(--cronos-msg); align-self: flex-start; border-bottom-left-radius: 2px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); border: 1px solid #333; }
+
+        .wave-indicator {
+            display: none; align-self: flex-start; background: var(--cronos-msg); border: 1px solid #333;
+            padding: 15px 20px; border-radius: 12px; border-bottom-left-radius: 2px; gap: 4px; align-items: center; height: 24px;
+        }
+        .wave-indicator span { width: 4px; height: 100%; background-color: var(--core-pensar); border-radius: 2px; animation: wave-think 1s infinite ease-in-out; box-shadow: 0 0 5px var(--core-pensar); }
+        .wave-indicator span:nth-child(1) { animation-delay: -0.4s; }
+        .wave-indicator span:nth-child(2) { animation-delay: -0.3s; }
+        .wave-indicator span:nth-child(3) { animation-delay: -0.2s; }
+        .wave-indicator span:nth-child(4) { animation-delay: -0.1s; }
+        .wave-indicator span:nth-child(5) { animation-delay: 0s; }
+        @keyframes wave-think { 0%, 40%, 100% { transform: scaleY(0.3); } 20% { transform: scaleY(1); } }
+
+        /* --- ZONA DE ENTRADA Y BOTONES --- */
+        .input-area { display: flex; padding: 20px; background: #161616; border-top: 1px solid #2a2a2a; gap: 10px; align-items: center;}
+        
+        input { 
+            flex: 1; padding: 15px 20px; border: 1px solid #333; border-radius: 8px; background: #222; 
+            color: white; font-size: 1rem; font-family: 'Comic Mono', monospace; outline: none; transition: border 0.3s; 
+        }
+        input:focus { border: 1px solid var(--core-escuchar); }
+
+        /* Botón Enviar con dibujo */
+        .btn-enviar { 
+            background: #333; border: 1px solid #444; color: white; width: 52px; height: 52px;
+            border-radius: 8px; cursor: pointer; transition: 0.3s; display: flex; align-items: center; justify-content: center;
+        }
+        .btn-enviar:hover { background: #444; border-color: #555; }
+        .btn-enviar svg { width: 24px; height: 24px; fill: white; }
+
+        /* Botón Micrófono con dibujo */
+        .btn-mic {
+            background: #222; border: 1px solid #333; color: white; border-radius: 50%; cursor: pointer;
+            display: flex; justify-content: center; align-items: center; transition: 0.3s; width: 52px; height: 52px; flex-shrink: 0;
+        }
+        .btn-mic svg { width: 24px; height: 24px; fill: #888; transition: fill 0.3s; }
+        .btn-mic:hover { background: var(--core-escuchar); border-color: var(--core-escuchar); box-shadow: 0 0 15px var(--core-escuchar); }
+        .btn-mic:hover svg { fill: white; }
+        
+        .btn-mic.activo { background: var(--core-escuchar); animation: pulse-btn 1s infinite; border-color: var(--core-escuchar); }
+        .btn-mic.activo svg { fill: white; }
+
+        @keyframes pulse-btn { 0% { box-shadow: 0 0 0 0 rgba(52, 152, 219, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(52, 152, 219, 0); } 100% { box-shadow: 0 0 0 0 rgba(52, 152, 219, 0); } }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: var(--chat-bg); }
+        ::-webkit-scrollbar-thumb { background: #444; border-radius: 10px; }
+    </style>
+</head>
+<body>
+
+    <div class="chat-container">
+        <div class="header">
+            <img src="/static/Logo_sin_fondo.png" alt="Logo" class="logo-cronos" onerror="this.style.display='none'">
+            
+            <div class="status-dot reposo" id="estado-led"></div>
+            <span>CronOS</span>
+            
+            <div class="equalizer" id="equalizer">
+                <span></span><span></span><span></span><span></span><span></span>
+            </div>
+        </div>
+        
+        <div class="chat-box" id="chat-box">
+            <div class="mensaje cronos">Módulos vocales y visuales en línea. Interfaz gráfica estable.</div>
+            <div class="wave-indicator" id="wave-indicator">
+                <span></span><span></span><span></span><span></span><span></span>
+            </div>
+        </div>
+
+        <div class="input-area">
+            <button class="btn-mic" id="btn-mic" onclick="alternarMicrofono()">
+                <svg viewBox="0 0 24 24">
+                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                    <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                </svg>
+            </button>
+            
+            <input type="text" id="input-mensaje" placeholder="Escribe o pulsa el micrófono..." autocomplete="off" onkeypress="manejarEnter(event)">
+            
+            <button class="btn-enviar" onclick="enviarMensaje()">
+                <svg viewBox="0 0 24 24">
+                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const chatBox = document.getElementById("chat-box");
+        const inputMensaje = document.getElementById("input-mensaje");
+        const estadoLed = document.getElementById("estado-led");
+        const waveIndicator = document.getElementById("wave-indicator");
+        const equalizer = document.getElementById("equalizer");
+        const btnMic = document.getElementById("btn-mic");
+
+        function cambiarEstado(estado) {
+            estadoLed.className = `status-dot ${estado}`;
+        }
+
+        function agregarMensaje(texto, remitente) {
+            const div = document.createElement("div");
+            div.className = `mensaje ${remitente}`;
+            div.innerText = texto;
+            chatBox.insertBefore(div, waveIndicator);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let reconocimiento;
+        let escuchando = false;
+
+        if (SpeechRecognition) {
+            reconocimiento = new SpeechRecognition();
+            reconocimiento.lang = 'es-ES';
+            reconocimiento.interimResults = false;
+            
+            reconocimiento.onstart = function() {
+                escuchando = true;
+                cambiarEstado('escuchando');
+                btnMic.classList.add('activo');
+                inputMensaje.placeholder = "Escuchando...";
+            };
+
+            reconocimiento.onspeechend = function() { reconocimiento.stop(); };
+
+            reconocimiento.onresult = function(event) {
+                const transcripcion = event.results[0][0].transcript;
+                inputMensaje.value = transcripcion;
+                enviarMensaje(); 
+            };
+
+            reconocimiento.onend = function() {
+                escuchando = false;
+                btnMic.classList.remove('activo');
+                inputMensaje.placeholder = "Escribe o pulsa el micrófono...";
+                if (estadoLed.classList.contains('escuchando')) cambiarEstado('reposo');
+            };
+        } else {
+            console.warn("API de reconocimiento de voz no soportada.");
+            btnMic.style.display = "none";
+        }
+
+        function alternarMicrofono() {
+            if (escuchando) reconocimiento.stop();
+            else if (reconocimiento) reconocimiento.start();
+        }
+
+        async function enviarMensaje() {
+            const texto = inputMensaje.value.trim();
+            if (texto === "") return;
+
+            agregarMensaje(texto, "usuario");
+            inputMensaje.value = "";
+            
+            cambiarEstado('pensando');
+            waveIndicator.style.display = "flex";
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            try {
+                const respuesta = await fetch('/enviar_mensaje', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mensaje: texto })
+                });
+                const datos = await respuesta.json();
+                
+                waveIndicator.style.display = "none";
+                agregarMensaje(datos.respuesta, "cronos");
+
+                cambiarEstado('hablando');
+                equalizer.classList.add("activo");
+
+                const tiempoEstimadoVoz = (datos.respuesta.length / 15) * 1000 + 1000; 
+
+                setTimeout(() => {
+                    cambiarEstado('reposo');
+                    equalizer.classList.remove("activo");
+                }, tiempoEstimadoVoz);
+
+            } catch (error) {
+                waveIndicator.style.display = "none";
+                agregarMensaje("Error en la conexión neuronal.", "cronos");
+                cambiarEstado('reposo');
+            }
+        }
+
+        function manejarEnter(event) {
+            if (event.key === "Enter") enviarMensaje();
+        }
+    </script>
+</body>
+</html>
