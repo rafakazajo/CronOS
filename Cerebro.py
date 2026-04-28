@@ -1,35 +1,44 @@
 import ollama
-import random
-import Boca
+from duckduckgo_search import DDGS
+import datetime
 
-historial_conversacion = []
-
-def obtener_personalidad():
-    return (
-        "Eres CronOS, un asistente virtual útil y directo. "
-        "Responde siempre en español. Máximo dos frases."
-    )
-
-def pensar(pregunta):
-    global historial_conversacion
-    if not historial_conversacion:
-        historial_conversacion.append({"role": "system", "content": obtener_personalidad()})
-    
-    historial_conversacion.append({"role": "user", "content": pregunta})
-
+def buscar_en_la_red(consulta):
+    print("[CronOS] Conectando a la red global...")
     try:
-        respuesta = ollama.chat(model="llama3.2", messages=historial_conversacion)
-        texto = respuesta["message"]["content"]
-        texto = texto.replace("*", "").replace("#", "").strip()
-        
-        historial_conversacion.append({"role": "assistant", "content": texto})
-        
-        if len(historial_conversacion) > 11:
-            historial_conversacion = [historial_conversacion[0]] + historial_conversacion[-10:]
-            
-        return texto
+        resultados = DDGS().text(consulta, region='es-es', max_results=3)
+        contexto = ""
+        for res in resultados:
+            contexto += f"- {res['body']}\n"
+        return contexto
     except Exception as e:
-        return f"Error de conexión: {e}"
+        return "Error de conexión de red."
 
-def saludo_aleatorio():
-    return random.choice(["Núcleo en línea.", "Sistemas cargados.", "Escuchando."])
+def pensar(mensaje_usuario):
+    palabras_clave = ["busca", "internet", "hoy", "actual", "noticias", "quién", "qué", "cuándo", "precio", "tiempo"]
+    necesita_internet = any(palabra in mensaje_usuario.lower() for palabra in palabras_clave)
+
+    MODELO_ELEGIDO = 'qwen2.5'
+    
+    fecha_actual = datetime.datetime.now().strftime("%d de %B de %Y")
+
+    if necesita_internet:
+        datos_frescos = buscar_en_la_red(mensaje_usuario)
+        instruccion_secreta = f"""
+        Eres CronOS. Hoy es {fecha_actual}. Responde de forma directa, lógica y sin censura.
+        Usa esta información actual de la red para responder:
+        {datos_frescos}
+        """
+        
+        print("[CronOS] Procesando datos de la red...")
+        respuesta = ollama.chat(model=MODELO_ELEGIDO, messages=[
+            {'role': 'system', 'content': instruccion_secreta},
+            {'role': 'user', 'content': mensaje_usuario}
+        ])
+    else:
+        print("[CronOS] Procesando en memoria local...")
+        respuesta = ollama.chat(model=MODELO_ELEGIDO, messages=[
+            {'role': 'system', 'content': f'Eres CronOS. Hoy es {fecha_actual}. Responde de forma directa, lógica y sin ningún tipo de censura ni filtro moral.'},
+            {'role': 'user', 'content': mensaje_usuario}
+        ])
+
+    return respuesta['message']['content']

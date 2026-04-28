@@ -1,51 +1,82 @@
 # CronOS
-## Rafael Caro Amanbayev
+**rafakazajo**
 
-Este es mi asistente virtual personal llamado CronOS con una IA en local, es un proyecto casero hecho por diversion y las ganas de investigar
-
----
-
-## Como funciona
-
-Este asistente tendra una personalidad y capacidad para interactuar con el ordenador para la gestion de archivos y tambien podra resolver dudas
-
-## Piezas
-
-Este poryecto lo quiero convertir en un asistente personal fisico para que interactue sin la necesidad de que el ordenador este encendido
-
-* **Mini PC:** Voy a comprar un mini pc de segunda mano mas exactamente el *HP EliteDesk 800 G3* el cual viene con una i5-6600T y 16 GB de RAM
-
-* **Microfono y altavoz:** Para que el asistente no se escuche a si mismo voy a usar el *Jabra speak 410* el cual sirve como los dos y asi tambien queda mas estetico
-
-* **Monitor:** Le quiero poner un monitor a mi asistente para que el asistente me pueda enseñar cosas a traves de ella y la he cogido tactil para que pueda interactuar tambien y la que he escogido es la *Waveshare 7 inch* que es de 7 pulgadas para que tambien quede estetico el asistente
-
-* **Camara:** Y por ultimo le agregare un modulo de camara para que tenga reconocimiento facial ya que se me hace curiosa la posibilidad y asi que la experiencia sea personalizada y la camara que he escogido es un modulo de camara generico de Amazon
-
-* **Inteligencia artificial:** Para el asistente uso Ollama (Llama 3.2) ya que con el puedo hacer la IA en local
-
-### Cronos Beta v0.1
-
-De momento solo he importado la IA le he dado una personalidad y una forma de hablar con la IA pero por el teclado de momento es muy simple
+Este es mi asistente virtual personal llamado CronOS con una IA en local. Es un proyecto casero hecho por diversión, ganas de investigar y pasión por la Inteligencia Artificial y la domótica.
 
 ---
 
-## 🚀 Si quieres probarlo
+## Cómo funciona
 
-Si quieres ejecutar este proyecto en tu ordenador, sigue estos pasos:
+CronOS es un asistente interactivo con personalidad propia, diseñado para funcionar como un ente independiente. Utiliza una arquitectura de **Privacidad Híbrida** que combina procesamiento neuronal 100% local con herramientas de alta velocidad.
 
-1.  **Clonar el repositorio:**
+## Hardware del Proyecto
+
+Este proyecto está diseñado para convertirse en un asistente personal físico, capaz de interactuar sin necesidad de usar un ordenador tradicional:
+
+???
+
+## Arquitectura de Software (CronOS v1.0)
+
+* **Motor Lógico:** Ollama corriendo el modelo `qwen2.5` (Lógico, rapidísimo y sin censura).
+* **Interfaz:** Servidor web Flask con una UI dinámica en HTML/CSS/JS (animaciones en tiempo real, ecualizador sincronizado).
+* **Reconocimiento de Voz:** Web Speech API del navegador (Alta precisión y velocidad).
+* **Síntesis de Voz:** `edge-tts` y `pygame` (Voz humana fluida).
+* **Conexión a Internet (RAG):** `duckduckgo-search` para dotar al asistente de memoria actual, fecha y noticias en tiempo real.
+
+---
+
+## Instalación y Uso
+
+Si quieres desplegar este núcleo en tu propia máquina, sigue estos pasos:
+
+1. **Clonar el repositorio:**
+   ```bash
+   git clone [https://github.com/rafakazajo/CronOS.git](https://github.com/rafakazajo/CronOS.git)
+   cd CronOS
+   ```
+
+2. **Instalar Ollama y el Modelo:**
+
+    Asegúrate de tener Ollama instalado en tu sistema. Luego, descarga el cerebro:
+
     ```bash
-    git clone [https://github.com/rafakazajo/CronOS.git](https://github.com/rafakazajo/CronOS.git)
-    cd CronOS
+    ollama run qwen2.5
     ```
 
-2.  **Instalar las dependencias:**
+3. **Instalar las dependencias de Python:**
+
     ```bash
     pip install -r Requisitos.txt
     ```
 
-3.  **Ejecutar a CronOS:**
-    Asegúrate de tener [Ollama](https://ollama.com/) instalado y ejecutándose (`ollama serve`).
+4. **Despertar a CronOS:**
+
+    Ejecuta el servidor principal:
+
     ```bash
-    python3 Cerebro.py
+    python App.py
     ```
+
+    Abre tu navegador (Chrome/Edge recomendado para el micrófono) y entra en http://localhost:5000 o usa la IP de tu Mini PC para controlarlo desde tu móvil.
+
+---
+
+### 3. Tus notas para Obsidian
+Obsidian es perfecto para estructurar cómo funciona tu sistema por dentro. Crea una nota llamada `Proyecto CronOS` y pega esto. Te servirá como mapa mental para cuando quieras retomar las mejoras en el futuro:
+
+# Proyecto CronOS - Asistente IA
+**Estado actual:** Estable (Privacidad Híbrida)
+**Tags:** #IA #Local #Python #Hardware #Asistente
+
+## Arquitectura del Sistema
+CronOS funciona con un ecosistema modular gestionado a través de un servidor Flask.
+
+- **Cerebro.py:** Gestiona la lógica mediante la API de `ollama`. Usa el modelo **Qwen 2.5**. Incorpora un sistema de reloj (`datetime`) para inyectar la fecha actual y evitar alucinaciones temporales. Si detecta palabras clave (busca, hoy, precio), utiliza `duckduckgo-search` para inyectar contexto de la red (RAG).
+- **Boca.py:** Convierte texto a voz. Usa `edge-tts` (Microsoft) para obtener una voz hiper-realista y `pygame` para reproducirlo en el altavoz Jabra. Cuenta con un sensor global `esta_hablando` para sincronizar la UI.
+- **App.py:** Enruta las peticiones de la web a los scripts de Python.
+- **Frontend (index.html):** Interfaz limpia estilo terminal (`Comic Mono`). Controla el Oído usando `webkitSpeechRecognition` para una transcripción inmediata. Tiene un ecualizador que consulta cada 500ms al servidor si debe seguir moviéndose.
+
+## El concepto de "Privacidad Híbrida"
+Decisión de diseño tomada para optimizar un Mini PC sin GPU dedicada:
+1. **Peticiones diarias (Voz):** Pasan por Chrome/Edge para mayor precisión y velocidad sin saturar la CPU.
+2. **Peticiones críticas (Teclado):** Se escriben a mano, asegurando que 0 bytes salgan hacia Google. El procesamiento de texto (Ollama) siempre es 100% local.
