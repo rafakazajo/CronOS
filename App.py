@@ -1,9 +1,36 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, abort
+from werkzeug.utils import secure_filename
 import threading
+import os
+import time
 import Cerebro
 import Boca
 
 app = Flask(__name__)
+
+IPS_PERMITIDAS = {'127.0.0.1', '192.168.1.53', '192.168.1.100', '192.168.1.43'}
+DIRECTORIO_SEGURO = os.path.expanduser("~/CronOS_Archivos")
+os.makedirs(DIRECTORIO_SEGURO, exist_ok=True)
+
+def realizar_limpieza_automatica():
+    while True:
+        ahora = time.time()
+        limite_antiguedad = 30 * 24 * 3600 # 30 días
+        try:
+            for nombre_archivo in os.listdir(DIRECTORIO_SEGURO):
+                ruta_completa = os.path.join(DIRECTORIO_SEGURO, nombre_archivo)
+                if os.path.isfile(ruta_completa):
+                    if ahora - os.path.getmtime(ruta_completa) > limite_antiguedad:
+                        os.remove(ruta_completa)
+        except Exception: pass
+        time.sleep(3600)
+
+threading.Thread(target=realizar_limpieza_automatica, daemon=True).start()
+
+@app.before_request
+def limitar_acceso():
+    if request.path.startswith('/static'): return
+    if request.remote_addr not in IPS_PERMITIDAS: abort(403)
 
 @app.route('/')
 def home():
@@ -17,13 +44,19 @@ def estado_boca():
 def enviar_mensaje():
     datos = request.json
     mensaje_usuario = datos.get('mensaje')
-    
-    respuesta_cronos = Cerebro.pensar(mensaje_usuario)
-    
-    threading.Thread(target=Boca.hablar, args=(respuesta_cronos,)).start()
+    modo_seleccionado = datos.get('modo', 'normal')
+    respuesta, accion = Cerebro.pensar(mensaje_usuario, modo_seleccionado)
+    threading.Thread(target=Boca.hablar, args=(respuesta,)).start()
+    return jsonify({"respuesta": respuesta, "accion": accion})
 
-    return jsonify({"respuesta": respuesta_cronos})
+@app.route('/subir_archivo', methods=['POST'])
+def subir_archivo():
+    if 'archivo' not in request.files: return jsonify({"error": "No hay archivo"}), 400
+    archivo = request.files['archivo']
+    if archivo:
+        nombre_seguro = secure_filename(archivo.filename)
+        archivo.save(os.path.join(DIRECTORIO_SEGURO, nombre_seguro))
+        return jsonify({"mensaje": "Listo"}), 200
 
 if __name__ == '__main__':
-    print("Iniciando Servidor CronOS...")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000)

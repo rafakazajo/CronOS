@@ -1,6 +1,11 @@
-venv/
 __pycache__/
-*.pyc
-.vscode/
+*.py[cod]
+*$py.class
+venv/
 .env
+
 respuesta.mp3
+CronOS_Archivos/
+
+.DS_Store
+Thumbs.db

@@ -3,3 +3,4 @@ ollama==0.1.7
 duckduckgo-search==5.3.0
 edge-tts==6.1.11
 pygame==2.5.2
+werkzeug
