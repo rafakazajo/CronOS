@@ -45,8 +45,13 @@ def enviar_mensaje():
     datos = request.json
     mensaje_usuario = datos.get('mensaje')
     modo_seleccionado = datos.get('modo', 'normal')
+    modo_silencio = datos.get('silencio', False)
+    
     respuesta, accion = Cerebro.pensar(mensaje_usuario, modo_seleccionado)
-    threading.Thread(target=Boca.hablar, args=(respuesta,)).start()
+    
+    if not modo_silencio:
+        threading.Thread(target=Boca.hablar, args=(respuesta,)).start()
+        
     return jsonify({"respuesta": respuesta, "accion": accion})
 
 @app.route('/subir_archivo', methods=['POST'])
@@ -57,6 +62,11 @@ def subir_archivo():
         nombre_seguro = secure_filename(archivo.filename)
         archivo.save(os.path.join(DIRECTORIO_SEGURO, nombre_seguro))
         return jsonify({"mensaje": "Listo"}), 200
+
+@app.route('/silenciar_boca', methods=['POST'])
+def silenciar_boca():
+    Boca.callar()
+    return jsonify({"mensaje": "Silenciado"})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
