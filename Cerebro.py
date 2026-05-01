@@ -74,6 +74,10 @@ def procesar_recuerdos(texto):
         guardar_memoria(dato.strip())
     return re.sub(patron_memoria, '', texto).strip()
 
+def limpiar_historial():
+    global historial_conversacion
+    historial_conversacion = []
+
 def pensar(mensaje_usuario, modo_actual="normal"):
     global historial_conversacion
     os.makedirs(DIRECTORIO_SEGURO, exist_ok=True)

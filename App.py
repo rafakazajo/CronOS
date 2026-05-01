@@ -15,7 +15,7 @@ os.makedirs(DIRECTORIO_SEGURO, exist_ok=True)
 def realizar_limpieza_automatica():
     while True:
         ahora = time.time()
-        limite_antiguedad = 30 * 24 * 3600 # 30 días
+        limite_antiguedad = 30 * 24 * 3600
         try:
             for nombre_archivo in os.listdir(DIRECTORIO_SEGURO):
                 ruta_completa = os.path.join(DIRECTORIO_SEGURO, nombre_archivo)
@@ -67,6 +67,11 @@ def subir_archivo():
 def silenciar_boca():
     Boca.callar()
     return jsonify({"mensaje": "Silenciado"})
+
+@app.route('/limpiar_chat', methods=['POST'])
+def limpiar_chat():
+    Cerebro.limpiar_historial()
+    return jsonify({"mensaje": "Historial borrado"})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
