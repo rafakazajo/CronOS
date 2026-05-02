@@ -4,6 +4,8 @@ import datetime
 import os
 import re
 import json
+import time
+import base64
 
 historial_conversacion = []
 MAX_MENSAJES = 10
@@ -78,11 +80,35 @@ def limpiar_historial():
     global historial_conversacion
     historial_conversacion = []
 
+def obtener_imagen_reciente():
+    extensiones = ('.png', '.jpg', '.jpeg')
+    archivos_validos = []
+    try:
+        for archivo in os.listdir(DIRECTORIO_SEGURO):
+            if archivo.lower().endswith(extensiones):
+                ruta_completa = os.path.join(DIRECTORIO_SEGURO, archivo)
+                archivos_validos.append(ruta_completa)
+        if not archivos_validos:
+            return None
+        archivo_mas_reciente = max(archivos_validos, key=os.path.getmtime)
+        if time.time() - os.path.getmtime(archivo_mas_reciente) < 300:
+            return archivo_mas_reciente
+    except Exception:
+        pass
+    return None
+
+def codificar_imagen_base64(ruta):
+    try:
+        with open(ruta, "rb") as archivo_imagen:
+            return base64.b64encode(archivo_imagen.read()).decode('utf-8')
+    except Exception:
+        return None
+
 def pensar(mensaje_usuario, modo_actual="normal"):
     global historial_conversacion
     os.makedirs(DIRECTORIO_SEGURO, exist_ok=True)
     
-    MODELO_ELEGIDO = 'qwen2.5'
+    modelo_activo = 'qwen2.5'
     fecha_actual = datetime.datetime.now().strftime("%d de %B de %Y")
     
     recuerdos_actuales = cargar_memoria()
@@ -94,34 +120,66 @@ def pensar(mensaje_usuario, modo_actual="normal"):
                        "REGLAS DE COMPORTAMIENTO:\n" \
                        "1. SUTILEZA: NO menciones los datos del contexto del usuario para saludar. Úsalos ÚNICAMENTE si la pregunta lo requiere.\n" \
                        "2. SIGLAS: ESTÁ ESTRICTAMENTE PROHIBIDO inventar siglas.\n" \
-                       "3. EJECUCIÓN DE HERRAMIENTAS (¡MUY IMPORTANTE!):\n" \
-                       "- Si el usuario te pide CREAR, GUARDAR o HACER un archivo, ESTÁS OBLIGADO a usar este comando exacto al final de tu respuesta, en una línea nueva: [CREAR_ARCHIVO | nombre_del_archivo.ext | contenido del archivo]\n" \
-                       "- Si el usuario menciona un dato nuevo sobre sí mismo, guárdalo obligatoriamente: [RECORDAR | El usuario...]\n" \
-                       "- NUNCA le digas al usuario que copie y pegue el código en un archivo si te ha pedido que lo crees tú."
+                       "3. EJECUCIÓN DE HERRAMIENTAS:\n" \
+                       "- ESTÁS OBLIGADO a usar este comando para crear archivos: [CREAR_ARCHIVO | nombre.ext | contenido]\n" \
+                       "- Guarda datos del usuario con: [RECORDAR | El usuario...]"
 
     if modo_actual == "estudio":
-        instruccion_sistema = instruccion_base + "\nModo ESTUDIO: Eres un tutor experto. Explica los conceptos paso a paso con analogías."
+        instruccion_sistema = instruccion_base + "\nModo ESTUDIO: Eres un tutor experto."
     elif modo_actual == "codigo":
-        instruccion_sistema = instruccion_base + "\nModo CÓDIGO ACTIVO: Eres un Ingeniero Senior. MUESTRA EL CÓDIGO DIRECTAMENTE. REGLA DE ORO: ESTÁ TOTAL Y ABSOLUTAMENTE PROHIBIDO AÑADIR COMENTARIOS (# o //) DENTRO DEL CÓDIGO. NINGUNO. CERO. Si incumples esto, el sistema fallará."
+        instruccion_sistema = instruccion_base + "\nModo CÓDIGO ACTIVO: MUESTRA EL CÓDIGO DIRECTAMENTE. ESTÁ PROHIBIDO AÑADIR COMENTARIOS DENTRO DEL CÓDIGO."
     else:
-        instruccion_sistema = instruccion_base + "\nModo NORMAL: Profesional, directo y amable."
+        instruccion_sistema = instruccion_base + "\nModo NORMAL: Profesional y directo."
 
     historial_conversacion.append({'role': 'user', 'content': mensaje_usuario})
     
-    respuesta = ollama.chat(model=MODELO_ELEGIDO, messages=[{'role': 'system', 'content': instruccion_sistema}] + historial_conversacion)
-    texto_bruto = respuesta['message']['content']
+    mensajes_api = [{'role': 'system', 'content': instruccion_sistema}]
+    for msg in historial_conversacion:
+        mensajes_api.append(dict(msg))
+        
+    imagen_detectada = obtener_imagen_reciente()
+    
+    if imagen_detectada:
+        imagen_b64 = codificar_imagen_base64(imagen_detectada)
+        if imagen_b64:
+            modelo_activo = 'moondream'
+            mensajes_api[-1]['images'] = [imagen_b64]
+            mensajes_api[0]['content'] = "Analyze the image and describe it in detail."
+
+    try:
+        respuesta = ollama.chat(model=modelo_activo, messages=mensajes_api)
+        texto_bruto = respuesta['message'].get('content', '')
+        
+        if not texto_bruto:
+            return "He analizado la imagen, pero el núcleo visual ha devuelto una respuesta vacía. Intenta hacer una pregunta más específica.", False
+
+        if modelo_activo == 'moondream':
+            mensajes_traduccion = [
+                {'role': 'system', 'content': instruccion_sistema},
+                {'role': 'user', 'content': f"El módulo visual reporta esto de la imagen: '{texto_bruto}'. Usando esta información, responde en español a mi pregunta original: '{mensaje_usuario}'. IMPORTANTE: Responde directamente y de forma natural. NO uses encabezados, ni etiquetas Markdown como '### Respuesta ###', ni preámbulos."}
+            ]
+            respuesta_qwen = ollama.chat(model='qwen2.5', messages=mensajes_traduccion)
+            texto_bruto = respuesta_qwen['message'].get('content', texto_bruto)
+            
+    except Exception as e:
+        print(f"[ERROR CRÍTICO OLLAMA]: {e}")
+        return f"Error en el núcleo de procesamiento visual o de lenguaje. Revisa la terminal.", False
     
     texto_bruto, contenido_extraido = procesar_lectura(texto_bruto)
     
     if contenido_extraido:
-        contexto_archivo = [{'role': 'user', 'content': f"Datos leídos:\n{contenido_extraido}"}]
-        segunda_res = ollama.chat(model=MODELO_ELEGIDO, messages=[{'role': 'system', 'content': instruccion_sistema}] + historial_conversacion + contexto_archivo)
-        texto_bruto = segunda_res['message']['content']
+        try:
+            contexto_archivo = [{'role': 'user', 'content': f"Datos leídos:\n{contenido_extraido}"}]
+            segunda_res = ollama.chat(model=modelo_activo, messages=mensajes_api + contexto_archivo)
+            texto_bruto = segunda_res['message'].get('content', texto_bruto)
+        except Exception:
+            pass
 
     texto_bruto = procesar_recuerdos(texto_bruto)
     texto_final, accion_escritura = procesar_escritura(texto_bruto)
     
     historial_conversacion.append({'role': 'assistant', 'content': texto_final})
-    if len(historial_conversacion) > MAX_MENSAJES: historial_conversacion = historial_conversacion[-MAX_MENSAJES:]
+    if len(historial_conversacion) > MAX_MENSAJES: 
+        historial_conversacion = historial_conversacion[-MAX_MENSAJES:]
 
     return texto_final, (accion_escritura or bool(contenido_extraido))
