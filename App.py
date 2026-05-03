@@ -9,7 +9,7 @@ import Boca
 app = Flask(__name__)
 
 IPS_PERMITIDAS = {'127.0.0.1', '192.168.1.53', '192.168.1.100', '192.168.1.43'}
-DIRECTORIO_SEGURO = os.path.expanduser("~/CronOS_Archivos")
+DIRECTORIO_SEGURO = os.path.expanduser("~/CronOS_Obsidian/Cerebro_CronOS")
 os.makedirs(DIRECTORIO_SEGURO, exist_ok=True)
 
 def realizar_limpieza_automatica():
@@ -17,11 +17,15 @@ def realizar_limpieza_automatica():
         ahora = time.time()
         limite_antiguedad = 30 * 24 * 3600
         try:
-            for nombre_archivo in os.listdir(DIRECTORIO_SEGURO):
-                ruta_completa = os.path.join(DIRECTORIO_SEGURO, nombre_archivo)
-                if os.path.isfile(ruta_completa):
-                    if ahora - os.path.getmtime(ruta_completa) > limite_antiguedad:
-                        os.remove(ruta_completa)
+            carpetas_volatiles = ["Documentos", "Imagenes", "Proyectos"]
+            for carpeta in carpetas_volatiles:
+                ruta_carpeta = os.path.join(DIRECTORIO_SEGURO, carpeta)
+                if os.path.exists(ruta_carpeta):
+                    for nombre_archivo in os.listdir(ruta_carpeta):
+                        ruta_completa = os.path.join(ruta_carpeta, nombre_archivo)
+                        if os.path.isfile(ruta_completa):
+                            if ahora - os.path.getmtime(ruta_completa) > limite_antiguedad:
+                                os.remove(ruta_completa)
         except Exception: pass
         time.sleep(3600)
 
@@ -60,7 +64,15 @@ def subir_archivo():
     archivo = request.files['archivo']
     if archivo:
         nombre_seguro = secure_filename(archivo.filename)
-        archivo.save(os.path.join(DIRECTORIO_SEGURO, nombre_seguro))
+        extension = nombre_seguro.rsplit('.', 1)[1].lower() if '.' in nombre_seguro else ''
+        
+        if extension in ['png', 'jpg', 'jpeg', 'gif', 'webp']:
+            carpeta_destino = os.path.join(DIRECTORIO_SEGURO, "Imagenes")
+        else:
+            carpeta_destino = os.path.join(DIRECTORIO_SEGURO, "Documentos")
+            
+        os.makedirs(carpeta_destino, exist_ok=True)
+        archivo.save(os.path.join(carpeta_destino, nombre_seguro))
         return jsonify({"mensaje": "Listo"}), 200
 
 @app.route('/silenciar_boca', methods=['POST'])

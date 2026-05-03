@@ -9,8 +9,8 @@ import base64
 
 historial_conversacion = []
 MAX_MENSAJES = 10
-DIRECTORIO_SEGURO = os.path.expanduser("~/CronOS_Archivos")
-ARCHIVO_MEMORIA = os.path.join(DIRECTORIO_SEGURO, "memoria_cronos.json")
+DIRECTORIO_SEGURO = os.path.expanduser("~/CronOS_Obsidian/Cerebro_CronOS")
+ARCHIVO_MEMORIA = os.path.join(DIRECTORIO_SEGURO, "Memoria_CronOS.md")
 
 def buscar_en_la_red(consulta):
     try:
@@ -29,15 +29,27 @@ def verificar_ruta_segura(ruta):
 def cargar_memoria():
     if os.path.exists(ARCHIVO_MEMORIA):
         with open(ARCHIVO_MEMORIA, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            lineas = f.readlines()
+            return [linea.strip('- \n') for linea in lineas if linea.startswith('-')]
     return []
 
 def guardar_memoria(dato):
     memoria = cargar_memoria()
     if dato not in memoria:
-        memoria.append(dato)
-        with open(ARCHIVO_MEMORIA, 'w', encoding='utf-8') as f:
-            json.dump(memoria, f, ensure_ascii=False, indent=4)
+        with open(ARCHIVO_MEMORIA, 'a', encoding='utf-8') as f:
+            f.write(f"- {dato}\n")
+
+def leer_cerebro_obsidian():
+    conocimiento = ""
+    try:
+        for archivo in os.listdir(DIRECTORIO_SEGURO):
+            if archivo.lower().endswith(".md"):
+                ruta = os.path.join(DIRECTORIO_SEGURO, archivo)
+                with open(ruta, 'r', encoding='utf-8') as f:
+                    conocimiento += f"\n[DOCUMENTO: {archivo}]\n{f.read()}\n"
+        return conocimiento[:8000]
+    except Exception:
+        return ""
 
 def procesar_lectura(texto):
     patron_leer = r'\[LEER_ARCHIVO\s*\|\s*(.*?)\]'
@@ -56,16 +68,22 @@ def procesar_escritura(texto):
     patron_crear = r'\[CREAR_ARCHIVO\s*\|\s*(.*?)\s*\|\s*(.*?)\]'
     coincidencias = re.findall(patron_crear, texto, re.DOTALL)
     nombres_archivos = []
+    
+    directorio_proyectos = os.path.join(DIRECTORIO_SEGURO, "Proyectos")
+    os.makedirs(directorio_proyectos, exist_ok=True)
+    
     for ruta, contenido in coincidencias:
         try:
-            ruta_segura = verificar_ruta_segura(ruta.strip())
+            nombre_archivo = os.path.basename(ruta.strip())
+            ruta_segura = os.path.join(directorio_proyectos, nombre_archivo)
             with open(ruta_segura, 'w', encoding='utf-8') as f:
                 f.write(contenido.strip())
-            nombres_archivos.append(os.path.basename(ruta_segura))
+            nombres_archivos.append(nombre_archivo)
         except Exception: pass
+        
     texto_limpio = re.sub(patron_crear, '', texto, flags=re.DOTALL).strip()
     if nombres_archivos:
-        confirmacion = f"He procedido a crear el archivo {', '.join(nombres_archivos)} en el núcleo."
+        confirmacion = f"He procedido a crear el archivo {', '.join(nombres_archivos)} en la carpeta Proyectos."
         texto_limpio = f"{texto_limpio} {confirmacion}" if texto_limpio else confirmacion
     return texto_limpio, bool(nombres_archivos)
 
@@ -83,10 +101,13 @@ def limpiar_historial():
 def obtener_imagen_reciente():
     extensiones = ('.png', '.jpg', '.jpeg')
     archivos_validos = []
+    directorio_imagenes = os.path.join(DIRECTORIO_SEGURO, "Imagenes")
     try:
-        for archivo in os.listdir(DIRECTORIO_SEGURO):
+        if not os.path.exists(directorio_imagenes):
+            return None
+        for archivo in os.listdir(directorio_imagenes):
             if archivo.lower().endswith(extensiones):
-                ruta_completa = os.path.join(DIRECTORIO_SEGURO, archivo)
+                ruta_completa = os.path.join(directorio_imagenes, archivo)
                 archivos_validos.append(ruta_completa)
         if not archivos_validos:
             return None
@@ -113,8 +134,12 @@ def pensar(mensaje_usuario, modo_actual="normal"):
     
     recuerdos_actuales = cargar_memoria()
     texto_memoria = "\n".join([f"- {r}" for r in recuerdos_actuales]) if recuerdos_actuales else "Aún no hay datos."
+    
+    conocimiento_obsidian = leer_cerebro_obsidian()
 
     instruccion_base = f"Eres CRONOS. Hoy es {fecha_actual}. RESPONDE EN ESPAÑOL.\n" \
+                       f"### BASE DE CONOCIMIENTO (OBSIDIAN) ###\n" \
+                       f"{conocimiento_obsidian}\n" \
                        f"### CONTEXTO DEL USUARIO ###\n" \
                        f"{texto_memoria}\n" \
                        "REGLAS DE COMPORTAMIENTO:\n" \
@@ -160,10 +185,10 @@ def pensar(mensaje_usuario, modo_actual="normal"):
             ]
             respuesta_qwen = ollama.chat(model='qwen2.5', messages=mensajes_traduccion)
             texto_bruto = respuesta_qwen['message'].get('content', texto_bruto)
-            
+
     except Exception as e:
         print(f"[ERROR CRÍTICO OLLAMA]: {e}")
-        return f"Error en el núcleo de procesamiento visual o de lenguaje. Revisa la terminal.", False
+        return f"Error en el núcleo de procesamiento. Revisa la terminal.", False
     
     texto_bruto, contenido_extraido = procesar_lectura(texto_bruto)
     
