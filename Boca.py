@@ -11,6 +11,8 @@ pygame.mixer.init()
 
 async def crear_voz(texto):
     global esta_hablando
+    
+    esta_hablando = True  
     archivo_audio = "respuesta.mp3"
     
     texto_limpio = re.sub(r'```.*?```', ' Aquí tienes el código en la pantalla. ', texto, flags=re.DOTALL)
@@ -22,7 +24,6 @@ async def crear_voz(texto):
         llamada_microsoft = edge_tts.Communicate(texto_limpio, voice=voz) 
         await llamada_microsoft.save(archivo_audio)
 
-        esta_hablando = True  
         pygame.mixer.music.load(archivo_audio)
         pygame.mixer.music.play()
         
@@ -33,7 +34,7 @@ async def crear_voz(texto):
     except Exception:
         pass
     finally:
-        esta_hablando = False  
+        esta_hablando = False
 
 def hablar(texto):
     asyncio.run(crear_voz(texto))

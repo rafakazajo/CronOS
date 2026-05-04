@@ -1,11 +1,24 @@
+# CREDENCIALES Y VARIABLES (CRÍTICO)
+.env
+Secreto.txt
+
+# DATOS PERSONALES Y MEMORIA
+CronOS_Archivos/
+Cerebro_CronOS/
+*.ics
+
+# ENTORNOS VIRTUALES DE PYTHON
+venv/
+env/
+.venv/
+
+# CACHÉ Y ARCHIVOS AUTO-GENERADOS
 __pycache__/
 *.py[cod]
 *$py.class
-venv/
-.env
-
 respuesta.mp3
-CronOS_Archivos/
 
+# ARCHIVOS DE SISTEMA OPERATIVO
 .DS_Store
 Thumbs.db
+ehthumbs.db

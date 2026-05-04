@@ -378,16 +378,11 @@
                 
                 if (!modoSilencio) {
                     setStatus('hablando'); eq.classList.add("activo");
-                    let hR = false;
-                    const i = setInterval(async ()=>{
-                        const rs = await fetch('/estado_boca'); const dt = await rs.json();
-                        if(dt.hablando) hR = true;
-                        if(!dt.hablando && hR){ 
-                            clearInterval(i); 
-                            setStatus('reposo'); 
-                            eq.classList.remove('activo'); 
-                            bloquearControles(false); 
-                        }
+                    setTimeout(async () => {
+                        await fetch('/esperar_boca');
+                        setStatus('reposo'); 
+                        eq.classList.remove('activo'); 
+                        bloquearControles(false); 
                     }, 500);
                 } else {
                     setStatus('reposo');

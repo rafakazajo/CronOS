@@ -8,7 +8,17 @@ import Boca
 
 app = Flask(__name__)
 
-IPS_PERMITIDAS = {'127.0.0.1', '192.168.1.53', '192.168.1.100', '192.168.1.43'}
+ruta_env = os.path.join(os.path.dirname(__file__), '.env')
+ips_cargadas = set(['127.0.0.1'])
+
+if os.path.exists(ruta_env):
+    with open(ruta_env, 'r') as f:
+        for linea in f:
+            if linea.startswith('IPS_PERMITIDAS='):
+                ips_str = linea.strip().split('=', 1)[1]
+                ips_cargadas.update([ip.strip() for ip in ips_str.split(',')])
+
+IPS_PERMITIDAS = ips_cargadas
 DIRECTORIO_SEGURO = os.path.expanduser("~/CronOS_Obsidian/Cerebro_CronOS")
 os.makedirs(DIRECTORIO_SEGURO, exist_ok=True)
 
@@ -43,6 +53,12 @@ def home():
 @app.route('/estado_boca', methods=['GET'])
 def estado_boca():
     return jsonify({"hablando": Boca.esta_hablando})
+
+@app.route('/esperar_boca', methods=['GET'])
+def esperar_boca():
+    while Boca.esta_hablando:
+        time.sleep(0.5)
+    return jsonify({"hablando": False})
 
 @app.route('/enviar_mensaje', methods=['POST'])
 def enviar_mensaje():
@@ -86,4 +102,7 @@ def limpiar_chat():
     return jsonify({"mensaje": "Historial borrado"})
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    from waitress import serve
+    print("[SISTEMA EN LÍNEA] Iniciando Núcleo CronOS en modo Producción (Waitress)...")
+    print("Escuchando en el puerto 5000 para múltiples dispositivos.")
+    serve(app, host='0.0.0.0', port=5000)
