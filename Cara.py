@@ -131,7 +131,7 @@ class InterfazCronOS(ctk.CTk):
                 break
 
             self.actualizar_ui("PENSANDO", "PROCESANDO...", "Enrutando respuesta por Ollama.", "#f1c40f")
-            respuesta = Cerebro.pensar(entrada)
+            respuesta, _ = Cerebro.pensar(entrada, "normal")
             self.log(f"CronOS: {respuesta}")
 
             if not self.sistema_activo: 

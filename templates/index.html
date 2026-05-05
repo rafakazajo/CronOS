@@ -360,38 +360,63 @@
             chat.appendChild(dL); setStatus('pensando'); chat.scrollTop = chat.scrollHeight;
 
             try {
-                const r = await fetch('/enviar_mensaje', { 
-                    method:'POST', 
-                    headers:{'Content-Type':'application/json'}, 
-                    body: JSON.stringify({mensaje:t, modo:document.getElementById("modo").value, silencio: modoSilencio})
+                const payload = {mensaje:t, modo:document.getElementById("modo").value, silencio: modoSilencio};
+                const r = await fetch('/enviar_mensaje_stream', { 
+                    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
                 });
-                const d = await r.json();
                 
-                if(d.accion) { 
-                    dL.innerHTML = `<div class="work-loader"><span></span><span></span><span></span></div>`;
-                    setStatus('trabajando'); 
-                    await new Promise(res => setTimeout(res, 1500)); 
-                }
+                const reader = r.body.getReader();
+                const decoder = new TextDecoder("utf-8");
+                let textoFinal = "";
                 
                 dL.innerHTML = "";
-                typewriter(dL, d.respuesta);
                 
-                if (!modoSilencio) {
-                    setStatus('hablando'); eq.classList.add("activo");
-                    setTimeout(async () => {
-                        await fetch('/esperar_boca');
-                        setStatus('reposo'); 
-                        eq.classList.remove('activo'); 
-                        bloquearControles(false); 
-                    }, 500);
-                } else {
-                    setStatus('reposo');
-                    bloquearControles(false);
+                while(true) {
+                    const {done, value} = await reader.read();
+                    if(done) break;
+                    
+                    const chunkStr = decoder.decode(value, {stream: true});
+                    const lineas = chunkStr.split('\n\n');
+                    
+                    for(let linea of lineas) {
+                        if(linea.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(linea.substring(6));
+                                
+                                if(data.herramienta) {
+                                    dL.innerHTML = `<div class="work-loader"><span></span><span></span><span></span></div>`;
+                                    setStatus('trabajando');
+                                } else if(data.reemplazar) {
+                                    dL.innerText = data.texto;
+                                    textoFinal = data.texto;
+                                    if(data.accion) { 
+                                        setStatus('trabajando'); 
+                                        await new Promise(res => setTimeout(res, 1500)); 
+                                    }
+                                } else if(data.texto) {
+                                    textoFinal += data.texto;
+                                    dL.innerText = textoFinal;
+                                    chat.scrollTop = chat.scrollHeight;
+                                }
+                                
+                                if(data.fin) {
+                                    if (!modoSilencio && textoFinal) {
+                                        setStatus('hablando'); eq.classList.add("activo");
+                                        setTimeout(async () => {
+                                            await fetch('/esperar_boca');
+                                            setStatus('reposo'); eq.classList.remove('activo'); bloquearControles(false); 
+                                        }, 500);
+                                    } else {
+                                        setStatus('reposo'); bloquearControles(false);
+                                    }
+                                }
+                            } catch(e) {}
+                        }
+                    }
                 }
             } catch(e) {
                 dL.innerText = "Error de conexión neuronal.";
-                setStatus('reposo');
-                bloquearControles(false);
+                setStatus('reposo'); bloquearControles(false);
             }
         }
 

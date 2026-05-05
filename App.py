@@ -1,5 +1,6 @@
-from flask import Flask, render_template, request, jsonify, abort
+from flask import Flask, render_template, request, jsonify, abort, Response, stream_with_context
 from werkzeug.utils import secure_filename
+import json
 import threading
 import os
 import time
@@ -73,6 +74,30 @@ def enviar_mensaje():
         threading.Thread(target=Boca.hablar, args=(respuesta,)).start()
         
     return jsonify({"respuesta": respuesta, "accion": accion})
+
+@app.route('/enviar_mensaje_stream', methods=['POST'])
+def enviar_mensaje_stream():
+    datos = request.json
+    mensaje_usuario = datos.get('mensaje')
+    modo_seleccionado = datos.get('modo', 'normal')
+    modo_silencio = datos.get('silencio', False)
+    
+    def generar():
+        texto_completo = ""
+        for chunk in Cerebro.pensar_stream(mensaje_usuario, modo_seleccionado):
+            yield chunk
+            try:
+                data = json.loads(chunk.replace("data: ", "").strip())
+                if data.get("reemplazar"):
+                    texto_completo = data.get("texto", "")
+                elif data.get("texto") and not data.get("herramienta"):
+                    texto_completo += data.get("texto")
+            except:
+                pass
+        if not modo_silencio and texto_completo:
+            threading.Thread(target=Boca.hablar, args=(texto_completo,)).start()
+            
+    return Response(stream_with_context(generar()), mimetype='text/event-stream')
 
 @app.route('/subir_archivo', methods=['POST'])
 def subir_archivo():

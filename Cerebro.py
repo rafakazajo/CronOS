@@ -1,6 +1,5 @@
 import ollama
 from ddgs import DDGS
-import datetime
 import os
 import re
 import json
@@ -11,11 +10,47 @@ import datetime
 import requests
 import pytz
 import recurring_ical_events
+import urllib.parse
+import webbrowser
+import psutil
+import threading
 
 historial_conversacion = []
 MAX_MENSAJES = 10
 DIRECTORIO_SEGURO = os.path.expanduser("~/CronOS_Obsidian/Cerebro_CronOS")
 ARCHIVO_MEMORIA = os.path.join(DIRECTORIO_SEGURO, "Memoria_CronOS.md")
+ARCHIVO_HISTORIAL = os.path.join(DIRECTORIO_SEGURO, "historial_sesion.json")
+
+_cache_obsidian = ""
+_cache_timestamps = {}
+
+def cargar_historial_guardado():
+    global historial_conversacion
+    if os.path.exists(ARCHIVO_HISTORIAL):
+        try:
+            with open(ARCHIVO_HISTORIAL, 'r', encoding='utf-8') as f:
+                historial_conversacion = json.load(f)
+        except Exception as e:
+            print(f"[ERROR cargar_historial_guardado]: {e}")
+            historial_conversacion = []
+
+def guardar_historial():
+    try:
+        with open(ARCHIVO_HISTORIAL, 'w', encoding='utf-8') as f:
+            json.dump(historial_conversacion, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[ERROR guardar_historial]: {e}")
+
+def limpiar_historial():
+    global historial_conversacion
+    historial_conversacion = []
+    if os.path.exists(ARCHIVO_HISTORIAL):
+        try:
+            os.remove(ARCHIVO_HISTORIAL)
+        except Exception as e:
+            print(f"[ERROR limpiar_historial]: {e}")
+
+cargar_historial_guardado()
 
 def buscar_en_la_red(consulta):
     try:
@@ -23,14 +58,12 @@ def buscar_en_la_red(consulta):
         contexto = ""
         for res in resultados:
             contexto += f"- {res['body']}\n"
-        
         if not contexto:
             return "SISTEMA: La búsqueda no devolvió resultados. Informa al usuario."
-            
         return contexto
     except Exception as e:
-        print(f"[ERROR DE RED]: {e}")
-        return "SISTEMA: Fallo de conexión o librería. Informa al usuario de que no puedes acceder a Internet ahora mismo."
+        print(f"[ERROR buscar_en_la_red]: {e}")
+        return "SISTEMA: Fallo de conexión o librería. Informa al usuario."
 
 def verificar_ruta_segura(ruta):
     nombre_archivo = os.path.basename(ruta)
@@ -38,59 +71,91 @@ def verificar_ruta_segura(ruta):
 
 def cargar_memoria():
     if os.path.exists(ARCHIVO_MEMORIA):
-        with open(ARCHIVO_MEMORIA, 'r', encoding='utf-8') as f:
-            lineas = f.readlines()
-            return [linea.strip('- \n') for linea in lineas if linea.startswith('-')]
+        try:
+            with open(ARCHIVO_MEMORIA, 'r', encoding='utf-8') as f:
+                lineas = f.readlines()
+                return [linea.strip('- \n') for linea in lineas if linea.startswith('-')]
+        except Exception as e:
+            print(f"[ERROR cargar_memoria]: {e}")
     return []
 
 def guardar_memoria(dato):
-    memoria = cargar_memoria()
-    if dato not in memoria:
-        memoria.append(dato)
-        
-        if len(memoria) > 20:
-            memoria = memoria[-20:]
-            
-        with open(ARCHIVO_MEMORIA, 'w', encoding='utf-8') as f:
-            for m in memoria:
-                f.write(f"- {m}\n")
+    try:
+        memoria = cargar_memoria()
+        if dato not in memoria:
+            memoria.append(dato)
+            if len(memoria) > 20:
+                memoria = memoria[-20:]
+            with open(ARCHIVO_MEMORIA, 'w', encoding='utf-8') as f:
+                for m in memoria:
+                    f.write(f"- {m}\n")
+    except Exception as e:
+        print(f"[ERROR guardar_memoria]: {e}")
 
 def leer_secreto(clave):
     ruta_secrets = os.path.join(DIRECTORIO_SEGURO, "Secreto.txt")
     if os.path.exists(ruta_secrets):
-        with open(ruta_secrets, 'r') as f:
-            for linea in f:
-                if linea.startswith(f"{clave}="):
-                    return linea.strip().split("=", 1)[1]
+        try:
+            with open(ruta_secrets, 'r') as f:
+                for linea in f:
+                    if linea.startswith(f"{clave}="):
+                        return linea.strip().split("=", 1)[1]
+        except Exception as e:
+            print(f"[ERROR leer_secreto]: {e}")
     return None
 
 def leer_cerebro_obsidian():
-    conocimiento_base = ""
-    conocimiento_extra = ""
-    archivos_criticos = ["01_Personalidad_CronOS.md", "02_Perfil_Rafael.md", "memoria_cronos.md"]
-    
+    global _cache_obsidian, _cache_timestamps
+    archivos_criticos = ["Personalidad_CronOS.md", "Perfil_Rafael.md", "Memoria_CronOS.md"]
+    cambios_detectados = False
+    rutas_a_leer = []
+
     try:
         for archivo in archivos_criticos:
             ruta = os.path.join(DIRECTORIO_SEGURO, archivo)
-            if os.path.exists(ruta):
-                with open(ruta, 'r', encoding='utf-8') as f:
-                    conocimiento_base += f"\n[DOCUMENTO CRÍTICO: {archivo}]\n{f.read()}\n"
-        
+            if os.path.exists(ruta): rutas_a_leer.append((ruta, True))
+            
         for archivo in os.listdir(DIRECTORIO_SEGURO):
             if archivo.lower().endswith(".md") and archivo not in archivos_criticos:
                 ruta = os.path.join(DIRECTORIO_SEGURO, archivo)
-                with open(ruta, 'r', encoding='utf-8') as f:
-                    conocimiento_extra += f"\n[DOCUMENTO: {archivo}]\n{f.read()}\n"
-        
-        espacio_restante = 8000 - len(conocimiento_base)
-        if espacio_restante > 0:
-            conocimiento_final = conocimiento_base + conocimiento_extra[:espacio_restante]
-        else:
-            conocimiento_final = conocimiento_base
-            
-        return conocimiento_final
-    except Exception:
-        return ""
+                rutas_a_leer.append((ruta, False))
+    except Exception as e:
+        print(f"[ERROR leer_cerebro_obsidian]: {e}")
+
+    timestamps_actuales = {}
+    for ruta, _ in rutas_a_leer:
+        try:
+            ts = os.path.getmtime(ruta)
+            timestamps_actuales[ruta] = ts
+            if _cache_timestamps.get(ruta) != ts:
+                cambios_detectados = True
+        except Exception as e:
+            print(f"[ERROR timestamps]: {e}")
+
+    if not cambios_detectados and _cache_obsidian:
+        return _cache_obsidian
+
+    conocimiento_base = ""
+    conocimiento_extra = ""
+    for ruta, es_critico in rutas_a_leer:
+        try:
+            with open(ruta, 'r', encoding='utf-8') as f:
+                if es_critico:
+                    conocimiento_base += f"\n[DOCUMENTO CRÍTICO: {os.path.basename(ruta)}]\n{f.read()}\n"
+                else:
+                    conocimiento_extra += f"\n[DOCUMENTO: {os.path.basename(ruta)}]\n{f.read()}\n"
+        except Exception as e:
+            print(f"[ERROR leer_archivos]: {e}")
+
+    espacio_restante = 8000 - len(conocimiento_base)
+    if espacio_restante > 0:
+        conocimiento_final = conocimiento_base + conocimiento_extra[:espacio_restante]
+    else:
+        conocimiento_final = conocimiento_base
+
+    _cache_obsidian = conocimiento_final
+    _cache_timestamps = timestamps_actuales
+    return conocimiento_final
 
 def procesar_lectura(texto):
     patron_leer = r'\[LEER_ARCHIVO\s*\|\s*(.*?)\]'
@@ -102,14 +167,14 @@ def procesar_lectura(texto):
             if os.path.exists(ruta_segura):
                 with open(ruta_segura, 'r', encoding='utf-8') as f:
                     contenido_total += f"\nContenido de {os.path.basename(ruta_segura)}:\n{f.read()}\n"
-        except Exception: pass
+        except Exception as e:
+            print(f"[ERROR procesar_lectura]: {e}")
     return re.sub(patron_leer, '', texto).strip(), contenido_total
 
 def procesar_escritura(texto):
     patron_crear = r'\[CREAR_ARCHIVO\s*\|\s*(.*?)\s*\|\s*(.*?)\]'
     coincidencias = re.findall(patron_crear, texto, re.DOTALL)
     nombres_archivos = []
-    
     directorio_proyectos = os.path.join(DIRECTORIO_SEGURO, "Proyectos")
     os.makedirs(directorio_proyectos, exist_ok=True)
     
@@ -120,7 +185,8 @@ def procesar_escritura(texto):
             with open(ruta_segura, 'w', encoding='utf-8') as f:
                 f.write(contenido.strip())
             nombres_archivos.append(nombre_archivo)
-        except Exception: pass
+        except Exception as e:
+            print(f"[ERROR procesar_escritura]: {e}")
         
     texto_limpio = re.sub(patron_crear, '', texto, flags=re.DOTALL).strip()
     if nombres_archivos:
@@ -134,348 +200,438 @@ def procesar_busqueda(texto):
     resultados_totales = ""
     for consulta in coincidencias:
         try:
-            print(f"[*] CronOS buscando en la red global: {consulta}")
+            print(f"[*] CronOS buscando en la red: {consulta}")
             resultados = buscar_en_la_red(consulta.strip())
             resultados_totales += f"\nResultados de la red para '{consulta}':\n{resultados}\n"
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[ERROR procesar_busqueda]: {e}")
     return re.sub(patron_buscar, '', texto).strip(), resultados_totales
 
 def procesar_apertura_app(texto):
     patron_abrir = r'\[ABRIR_APP\s*\|\s*(.*?)\]'
     coincidencias = re.findall(patron_abrir, texto)
-    
     apps_seguras = {
-        "navegador": "google-chrome",
-        "chrome": "google-chrome",
-        "google chrome": "google-chrome",
-        "archivos": "nemo",
-        "nemo": "nemo",
-        "carpeta": "nemo",
-        "codigo": "code",
-        "code": "code",
-        "vscode": "code",
-        "terminal": "gnome-terminal",
-        "consola": "gnome-terminal"
+        "navegador": "google-chrome", "chrome": "google-chrome", 
+        "archivos": "nemo", "carpeta": "nemo",
+        "codigo": "code", "vscode": "code",
+        "terminal": "gnome-terminal"
     }
-    
     acciones = ""
     for app in coincidencias:
         app_limpia = app.strip().lower()
-        print(f"[*] CronOS intentando ejecutar comando: '{app_limpia}'")
-        
-        comando_a_ejecutar = None
-        for clave, comando in apps_seguras.items():
-            if clave in app_limpia:
-                comando_a_ejecutar = comando
-                break
-        
-        if comando_a_ejecutar:
+        comando = next((cmd for clave, cmd in apps_seguras.items() if clave in app_limpia), None)
+        if comando:
             try:
-                subprocess.Popen([comando_a_ejecutar], start_new_session=True)
-                acciones += f"He ejecutado la apertura de {comando_a_ejecutar}. "
+                subprocess.Popen([comando], start_new_session=True)
+                acciones += f"He ejecutado la apertura de {comando}. "
             except Exception as e:
-                print(f"[ERROR DE SISTEMA]: No se pudo abrir {comando_a_ejecutar}. {e}")
-                acciones += f"Hubo un fallo en Linux Mint al intentar abrir {comando_a_ejecutar}. "
+                print(f"[ERROR procesar_apertura_app]: {e}")
+                acciones += f"Fallo al abrir {comando}. "
         else:
-            acciones += f"No tengo permisos de seguridad para abrir la aplicación '{app_limpia}'. "
+            acciones += f"No tengo permisos para abrir '{app_limpia}'. "
             
     texto_limpio = re.sub(patron_abrir, '', texto).strip()
-    
-    if acciones:
-        texto_limpio = f"{texto_limpio} {acciones}".strip()
-        
+    if acciones: texto_limpio = f"{texto_limpio} {acciones}".strip()
     return texto_limpio
 
 def procesar_control_pc(texto):
     patron_control = r'\[?CONTROL_PC\s*\|\s*([a-zA-Z0-9_ ]+)\]?'
     coincidencias = re.findall(patron_control, texto)
-    
     comandos_seguros = {
         "subir volumen": ["amixer", "-q", "sset", "Master", "10%+"],
-        "subir_volumen": ["amixer", "-q", "sset", "Master", "10%+"],
         "bajar volumen": ["amixer", "-q", "sset", "Master", "10%-"],
-        "bajar_volumen": ["amixer", "-q", "sset", "Master", "10%-"],
         "mutear": ["amixer", "-q", "sset", "Master", "toggle"],
-        "silenciar": ["amixer", "-q", "sset", "Master", "toggle"],
-        "volumen maximo": ["amixer", "-q", "sset", "Master", "100%"],
-        "volumen_maximo": ["amixer", "-q", "sset", "Master", "100%"],
-        "suspender": ["systemctl", "suspend"]
+        "pausar musica": ["playerctl", "play-pause"],
+        "siguiente cancion": ["playerctl", "next"]
     }
-    
     acciones = ""
     for accion in coincidencias:
         accion_limpia = accion.strip().lower()
-        print(f"[*] CronOS ejecutando orden de sistema: '{accion_limpia}'")
-        
-        comando_a_ejecutar = None
-        for clave, cmd in comandos_seguros.items():
-            if clave in accion_limpia:
-                comando_a_ejecutar = cmd
-                break
-                
-        if comando_a_ejecutar:
+        comando = next((cmd for clave, cmd in comandos_seguros.items() if clave in accion_limpia), None)
+        if comando:
             try:
-                import subprocess
-                subprocess.run(comando_a_ejecutar)
+                subprocess.run(comando)
                 acciones += f"He ejecutado la orden en tu ordenador. "
             except Exception as e:
-                print(f"[ERROR DE SISTEMA]: {e}")
-                acciones += f"No he podido ejecutar la orden debido a un error del sistema operativo. "
-        else:
-            acciones += f"La orden '{accion_limpia}' no está en mi lista de protocolos seguros. "
-
+                print(f"[ERROR procesar_control_pc]: {e}")
+                acciones += f"Fallo al ejecutar la orden. "
     texto_limpio = re.sub(patron_control, '', texto).strip()
-    if acciones:
-        texto_limpio = f"{texto_limpio} {acciones}".strip()
-        
+    if acciones: texto_limpio = f"{texto_limpio} {acciones}".strip()
+    return texto_limpio
+
+def procesar_correo(texto):
+    patron_correo = r'\[PREPARAR_CORREO\s*\|\s*(.*?)\]'
+    coincidencias = re.findall(patron_correo, texto, re.DOTALL)
+    acciones = ""
+    for coincidencia in coincidencias:
+        try:
+            partes = [p.strip() for p in coincidencia.split('|')]
+            destinatario = partes[0] if len(partes) > 0 else ""
+            asunto = partes[1] if len(partes) > 1 else "Nuevo mensaje"
+            cuerpo = partes[2] if len(partes) > 2 else asunto
+            
+            asunto_cod = urllib.parse.quote(asunto)
+            cuerpo_cod = urllib.parse.quote(cuerpo)
+            webbrowser.open(f"mailto:{destinatario}?subject={asunto_cod}&body={cuerpo_cod}")
+            acciones += f"He preparado el correo para {destinatario}. "
+        except Exception as e:
+            print(f"[ERROR procesar_correo]: {e}")
+            acciones += "Hubo un fallo al preparar el correo. "
+            
+    texto_limpio = re.sub(patron_correo, '', texto, flags=re.DOTALL).strip()
+    if acciones: texto_limpio = f"{texto_limpio} {acciones}".strip()
+    return texto_limpio
+
+def procesar_captura_pantalla(texto):
+    patron = r'\[?VER_PANTALLA\]?'
+    if re.search(patron, texto):
+        try:
+            ruta_captura = os.path.join(DIRECTORIO_SEGURO, "Imagenes", "captura.png")
+            subprocess.run(["gnome-screenshot", "-f", ruta_captura])
+            texto_limpio = re.sub(patron, '', texto).strip()
+            return texto_limpio + " He tomado una captura de pantalla. ¿Qué analizo?"
+        except Exception as e:
+            print(f"[ERROR procesar_captura_pantalla]: {e}")
+            return re.sub(patron, '', texto).strip() + " Falló la captura."
+    return texto
+
+def procesar_portapapeles(texto):
+    patron = r'\[?LEER_PORTAPAPELES\]?'
+    if re.search(patron, texto):
+        try:
+            import pyperclip
+            contenido = pyperclip.paste()
+            texto_limpio = re.sub(patron, '', texto).strip()
+            if contenido: return f"{texto_limpio}\nPORTAPAPELES:\n{contenido}"
+        except Exception as e:
+            print(f"[ERROR procesar_portapapeles]: {e}")
+        return f"{texto_limpio} (Portapapeles vacío o error)."
+    return texto
+
+def procesar_diagnostico_pc(texto):
+    patron = r'\[?DIAGNOSTICO_PC\]?'
+    if re.search(patron, texto):
+        print("[*] CronOS analizando salud con psutil...")
+        try:
+            ram = psutil.virtual_memory()
+            cpu = psutil.cpu_percent(interval=0.5)
+            disco = psutil.disk_usage(os.path.expanduser('~'))
+            
+            ram_str = f"RAM: {ram.total / (1024**3):.1f}GB total, {ram.used / (1024**3):.1f}GB usada ({ram.percent}%)"
+            cpu_str = f"CPU: {cpu}% uso"
+            disco_str = f"DISCO (/home): {disco.total / (1024**3):.1f}GB total, {disco.free / (1024**3):.1f}GB libre"
+            
+            contexto_limpio = f"{ram_str} | {cpu_str} | {disco_str}"
+            texto_limpio = re.sub(patron, '', texto).strip()
+            return f"{texto_limpio}\nDATOS DE SISTEMA: {contexto_limpio}"
+        except Exception as e:
+            print(f"[ERROR procesar_diagnostico_pc]: {e}")
+            return re.sub(patron, '', texto).strip() + " Error de sensores."
+    return texto
+
+def temporizador_hilo(segundos, mensaje):
+    time.sleep(segundos)
+    try:
+        subprocess.run(["notify-send", "-u", "critical", "CronOS: Tiempo agotado", mensaje])
+        ruta_sonido = "/usr/share/sounds/freedesktop/stereo/complete.oga"
+        for _ in range(3):
+            subprocess.run(["paplay", ruta_sonido])
+            time.sleep(0.5)
+    except Exception as e:
+        print(f"[ERROR temporizador_hilo]: {e}")
+
+def procesar_temporizador(texto):
+    patron = r'\[?(?:TEMPORIZADOR|PROGRAMAR_ALERTA)\s*\|\s*(\d+)\s*\|\s*([^\]]+)\]?'
+    coincidencias = re.findall(patron, texto)
+    confirmaciones = ""
+    for minutos, motivo in coincidencias:
+        try:
+            segundos = int(minutos) * 60
+            threading.Thread(target=temporizador_hilo, args=(segundos, motivo.strip()), daemon=True).start()
+            confirmaciones += f"He programado {minutos} minutos para {motivo.strip()}. "
+        except Exception as e:
+            print(f"[ERROR procesar_temporizador]: {e}")
+    texto_limpio = re.sub(patron, '', texto, flags=re.DOTALL).strip()
+    if confirmaciones: return f"{texto_limpio} {confirmaciones}".strip()
     return texto_limpio
 
 def leer_eventos_calendario():
     ruta_ics = os.path.join(DIRECTORIO_SEGURO, "mi_agenda.ics")
-    
     url_google = leer_secreto("CALENDAR_URL")
     
     if url_google:
         try:
-            print("[*] Sincronizando agenda con la nube de Google...")
             respuesta = requests.get(url_google, timeout=5)
             respuesta.raise_for_status()
             with open(ruta_ics, 'wb') as f:
                 f.write(respuesta.content)
-            print("[*] Agenda sincronizada correctamente.")
         except Exception as e:
-            print(f"[ERROR DE RED] No se pudo actualizar el calendario desde Google. Detalle: {e}")
-    else:
-        print("[AVISO] No se encontró 'CALENDAR_URL' en secrets.txt. Usando copia local si existe.")
-    
-    if not os.path.exists(ruta_ics):
-        return "No se encontró el archivo de agenda."
+            print(f"[ERROR descargar calendario]: {e}")
+            
+    if not os.path.exists(ruta_ics): return "No hay archivo de agenda."
     
     try:
         from icalendar import Calendar
-        import recurring_ical_events
-        import pytz
-        
-        with open(ruta_ics, 'rb') as f:
-            cal = Calendar.from_ical(f.read())
-        
+        with open(ruta_ics, 'rb') as f: cal = Calendar.from_ical(f.read())
         zona_espana = pytz.timezone('Europe/Madrid')
         hoy = datetime.date.today()
-        fecha_fin = hoy + datetime.timedelta(days=30) 
-        
-        eventos_expandidos = recurring_ical_events.of(cal).between(hoy, fecha_fin)
+        eventos_expandidos = recurring_ical_events.of(cal).between(hoy, hoy + datetime.timedelta(days=30))
         
         eventos_raw = []
-        
         for component in eventos_expandidos:
             dtstart_raw = component.get('dtstart')
-            if dtstart_raw is not None:
+            if dtstart_raw:
                 dt_val = dtstart_raw.dt
-                
                 if isinstance(dt_val, datetime.datetime):
-                    if dt_val.tzinfo is None:
-                        dt_val = pytz.utc.localize(dt_val)
-                    dt_local = dt_val.astimezone(zona_espana)
-                    
-                    fecha_str = dt_local.strftime('%d-%m-%Y a las %H:%M')
+                    dt_local = pytz.utc.localize(dt_val).astimezone(zona_espana) if dt_val.tzinfo is None else dt_val.astimezone(zona_espana)
                     fecha_matematica = dt_local
+                    fecha_str = dt_local.strftime('%d-%m-%Y a las %H:%M')
                 else:
-                    fecha_str = dt_val.strftime('%d-%m-%Y (Todo el día)')
                     fecha_matematica = zona_espana.localize(datetime.datetime.combine(dt_val, datetime.time.min))
+                    fecha_str = dt_val.strftime('%d-%m-%Y (Todo el día)')
                 
                 if fecha_matematica.date() >= hoy:
-                    resumen = component.get('summary', 'Evento sin título')
-                    eventos_raw.append((fecha_matematica, f"- {fecha_str}: {resumen}"))
+                    eventos_raw.append((fecha_matematica, f"- {fecha_str}: {component.get('summary', 'Evento')}"))
         
-        if not eventos_raw:
-            return "La agenda está libre, no hay eventos próximos."
-        
+        if not eventos_raw: return "La agenda está libre."
         eventos_raw.sort(key=lambda x: x[0])
-        
-        eventos_finales = []
-        textos_vistos = set()
-        for _, texto in eventos_raw:
-            if texto not in textos_vistos:
-                textos_vistos.add(texto)
-                eventos_finales.append(texto)
-        
-        return "Eventos próximos:\n" + "\n".join(eventos_finales[:7])
-        
+        eventos_finales = list(dict.fromkeys([texto for _, texto in eventos_raw]))
+        return "Eventos:\n" + "\n".join(eventos_finales[:7])
     except Exception as e:
-        return f"Error interno al analizar el calendario: {e}"
-    
+        print(f"[ERROR analizar calendario]: {e}")
+        return "Error al procesar calendario."
+
 def procesar_agenda(texto):
-    patron_agenda = r'\[?LEER_AGENDA\]?'
-    if re.search(patron_agenda, texto):
-        print("[*] CronOS accediendo a la agenda local...")
+    patron = r'\[?LEER_AGENDA\]?'
+    if re.search(patron, texto):
         eventos = leer_eventos_calendario()
-        texto_limpio = re.sub(patron_agenda, '', texto).strip()
-        return texto_limpio, eventos
+        return re.sub(patron, '', texto).strip(), eventos
     return texto, None
 
 def procesar_recuerdos(texto):
-    patron_memoria = r'\[?RECORDAR\s*\|\s*([^\n\]]+)\]?'
-    coincidencias = re.findall(patron_memoria, texto)
-    for dato in coincidencias:
-        guardar_memoria(dato.strip())
-    return re.sub(patron_memoria, '', texto).strip()
-
-def limpiar_historial():
-    global historial_conversacion
-    historial_conversacion = []
+    patron = r'\[?RECORDAR\s*\|\s*([^\n\]]+)\]?'
+    for dato in re.findall(patron, texto): guardar_memoria(dato.strip())
+    return re.sub(patron, '', texto).strip()
 
 def obtener_imagen_reciente():
-    extensiones = ('.png', '.jpg', '.jpeg')
-    archivos_validos = []
-    directorio_imagenes = os.path.join(DIRECTORIO_SEGURO, "Imagenes")
     try:
-        if not os.path.exists(directorio_imagenes):
-            return None
-        for archivo in os.listdir(directorio_imagenes):
-            if archivo.lower().endswith(extensiones):
-                ruta_completa = os.path.join(directorio_imagenes, archivo)
-                archivos_validos.append(ruta_completa)
-        if not archivos_validos:
-            return None
-        archivo_mas_reciente = max(archivos_validos, key=os.path.getmtime)
-        if time.time() - os.path.getmtime(archivo_mas_reciente) < 300:
-            return archivo_mas_reciente
-    except Exception:
-        pass
+        dir_img = os.path.join(DIRECTORIO_SEGURO, "Imagenes")
+        if not os.path.exists(dir_img): return None
+        archivos = [os.path.join(dir_img, f) for f in os.listdir(dir_img) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+        if not archivos: return None
+        mas_reciente = max(archivos, key=os.path.getmtime)
+        if time.time() - os.path.getmtime(mas_reciente) < 300: return mas_reciente
+    except Exception as e:
+        print(f"[ERROR obtener_imagen]: {e}")
     return None
 
 def codificar_imagen_base64(ruta):
     try:
-        with open(ruta, "rb") as archivo_imagen:
-            return base64.b64encode(archivo_imagen.read()).decode('utf-8')
-    except Exception:
-        return None
+        with open(ruta, "rb") as f: return base64.b64encode(f.read()).decode('utf-8')
+    except Exception as e:
+        print(f"[ERROR base64_img]: {e}")
+    return None
 
-def pensar(mensaje_usuario, modo_actual="normal"):
+def pensar(mensaje_usuario, modo_actual="normal", _desde_stream=False):
     global historial_conversacion
     os.makedirs(DIRECTORIO_SEGURO, exist_ok=True)
     
-    modelo_activo = 'qwen2.5:3b'
-    fecha_actual = datetime.datetime.now().strftime("%d de %B de %Y")
+    modelo_activo = leer_secreto("MODELO_PRINCIPAL")
+    if not modelo_activo: modelo_activo = 'qwen2.5:3b'
     
+    fecha_actual = datetime.datetime.now().strftime("%d de %B de %Y")
     recuerdos_actuales = cargar_memoria()
     texto_memoria = "\n".join([f"- {r}" for r in recuerdos_actuales]) if recuerdos_actuales else "Aún no hay datos."
     
-    conocimiento_obsidian = leer_cerebro_obsidian()
+    instruccion_base = (
+        f"Eres CRONOS. Hoy es {fecha_actual}. RESPONDE EN ESPAÑOL.\n"
+        f"### BASE DE CONOCIMIENTO ###\n{leer_cerebro_obsidian()}\n"
+        f"### CONTEXTO ###\n{texto_memoria}\n"
+        "REGLAS:\n"
+        "1. NO menciones datos del contexto para saludar. Sé conversacional y natural.\n"
+        "2. HERRAMIENTAS (USAR SOLO SI EL USUARIO LO PIDE EXPLÍCITAMENTE):\n"
+        "- [CREAR_ARCHIVO | nombre.ext | cont]\n"
+        "- [RECORDAR | dato]\n"
+        "- [BUSCAR | consulta]\n"
+        "- [ABRIR_APP | app]\n"
+        "- [CONTROL_PC | accion]\n"
+        "- [LEER_AGENDA]\n"
+        "- [PREPARAR_CORREO | dest | asun | cuerpo]\n"
+        "- [VER_PANTALLA]\n"
+        "- [LEER_PORTAPAPELES]\n"
+        "- [TEMPORIZADOR | min | motivo]\n"
+        "- [DIAGNOSTICO_PC]\n"
+        "DIRECTIVA CRÍTICA: Si el usuario pide una acción, usa el comando exacto. Si el usuario solo está charlando (ej: te dice 'Hola'), responde de forma natural SIN usar comandos."
+    )
 
-    instruccion_base = f"Eres CRONOS. Hoy es {fecha_actual}. RESPONDE EN ESPAÑOL.\n" \
-                        f"### BASE DE CONOCIMIENTO (OBSIDIAN) ###\n" \
-                        f"{conocimiento_obsidian}\n" \
-                        f"### CONTEXTO DEL USUARIO ###\n" \
-                        f"{texto_memoria}\n" \
-                        "REGLAS DE COMPORTAMIENTO:\n" \
-                        "1. SUTILEZA: NO menciones los datos del contexto para saludar.\n" \
-                        "2. SIGLAS: ESTÁ ESTRICTAMENTE PROHIBIDO inventar siglas.\n" \
-                        "3. EJECUCIÓN DE HERRAMIENTAS (USO OBLIGATORIO Y ESTRICTO):\n" \
-                        "- Crear archivos: [CREAR_ARCHIVO | nombre.ext | contenido]\n" \
-                        "- Guardar datos: [RECORDAR | El usuario...]\n" \
-                        "- Buscar en Internet: [BUSCAR | palabras clave]\n" \
-                        "- Abrir programas: [ABRIR_APP | app]\n" \
-                        "- Controlar sistema: [CONTROL_PC | accion]\n" \
-                        "- Consultar agenda del usuario: [LEER_AGENDA]\n" \
-                        "DIRECTIVA CRÍTICA: Responde a las peticiones de acción ÚNICAMENTE con el formato exacto del comando INCLUYENDO LOS CORCHETES. Si el usuario te pregunta por sus eventos, citas o exámenes, usa SIEMPRE [LEER_AGENDA] y detente. Yo interceptaré el comando."
-    
-    if modo_actual == "estudio":
-        instruccion_sistema = instruccion_base + "\nModo ESTUDIO: Eres un tutor experto."
-    elif modo_actual == "codigo":
-        instruccion_sistema = instruccion_base + "\nModo CÓDIGO ACTIVO: MUESTRA EL CÓDIGO DIRECTAMENTE. ESTÁ PROHIBIDO AÑADIR COMENTARIOS DENTRO DEL CÓDIGO."
-    else:
-        instruccion_sistema = instruccion_base + "\nModo NORMAL: Profesional y directo."
+    if modo_actual == "estudio": instruccion_sistema = instruccion_base + "\nModo ESTUDIO."
+    elif modo_actual == "codigo": instruccion_sistema = instruccion_base + "\nModo CÓDIGO ACTIVO: MUESTRA CÓDIGO DIRECTO."
+    else: instruccion_sistema = instruccion_base + "\nModo NORMAL."
 
-    historial_conversacion.append({'role': 'user', 'content': mensaje_usuario})
-    
-    mensajes_api = [{'role': 'system', 'content': instruccion_sistema}]
-    for msg in historial_conversacion:
-        mensajes_api.append(dict(msg))
+    if not _desde_stream:
+        historial_conversacion.append({'role': 'user', 'content': mensaje_usuario})
+        
+    mensajes_api = [{'role': 'system', 'content': instruccion_sistema}] + list(historial_conversacion)
         
     imagen_detectada = obtener_imagen_reciente()
-    
     if imagen_detectada:
         imagen_b64 = codificar_imagen_base64(imagen_detectada)
         if imagen_b64:
-            modelo_activo = 'moondream'
-            mensajes_api[-1]['images'] = [imagen_b64]
-            mensajes_api[0]['content'] = "Analyze the image and describe it in detail."
-
-    try:
-        respuesta = ollama.chat(model=modelo_activo, messages=mensajes_api)
-        texto_bruto = respuesta['message'].get('content', '')
-        
-        if not texto_bruto:
-            return "He analizado la imagen, pero el núcleo visual ha devuelto una respuesta vacía. Intenta hacer una pregunta más específica.", False
-
-        if modelo_activo == 'moondream':
-            mensajes_traduccion = [
-                {'role': 'system', 'content': instruccion_sistema},
-                {'role': 'user', 'content': f"El módulo visual reporta esto de la imagen: '{texto_bruto}'. Usando esta información, responde en español a mi pregunta original: '{mensaje_usuario}'. IMPORTANTE: Responde directamente y de forma natural. NO uses encabezados, ni etiquetas Markdown como '### Respuesta ###', ni preámbulos."}
+            mensajes_vision = [
+                {'role': 'system', 'content': "Analyze the image and describe it in detail."},
+                {'role': 'user', 'content': mensaje_usuario, 'images': [imagen_b64]}
             ]
-            respuesta_qwen = ollama.chat(model='qwen2.5', messages=mensajes_traduccion)
-            texto_bruto = respuesta_qwen['message'].get('content', texto_bruto)
-
-    except Exception as e:
-        print(f"[ERROR CRÍTICO OLLAMA]: {e}")
-        return f"Error en el núcleo de procesamiento. Revisa la terminal.", False
+            try:
+                respuesta_vision = ollama.chat(model='moondream', messages=mensajes_vision)
+                texto_bruto = respuesta_vision['message'].get('content', '')
+                if texto_bruto:
+                    mensajes_traduccion = [
+                        {'role': 'system', 'content': instruccion_sistema},
+                        {'role': 'user', 'content': f"Visión reporta: '{texto_bruto}'. Responde a: '{mensaje_usuario}'."}
+                    ]
+                    texto_bruto = ollama.chat(model=modelo_activo, messages=mensajes_traduccion)['message'].get('content', texto_bruto)
+            except Exception as e:
+                print(f"[ERROR VISUAL]: {e}")
+                texto_bruto = "Error visual."
     
-    texto_bruto, contenido_extraido = procesar_lectura(texto_bruto)
-    if contenido_extraido:
+    if not imagen_detectada:
         try:
-            contexto_archivo = [{'role': 'user', 'content': f"Datos leídos:\n{contenido_extraido}"}]
-            segunda_res = ollama.chat(model=modelo_activo, messages=mensajes_api + contexto_archivo)
-            texto_bruto = segunda_res['message'].get('content', texto_bruto)
-        except Exception:
-            pass
-
-    texto_bruto, resultados_red = procesar_busqueda(texto_bruto)
-    texto_bruto, resultados_agenda = procesar_agenda(texto_bruto)
-    if resultados_agenda:
-        print("\n--- [DEPURACIÓN] DATOS CRUDOS DEL CALENDARIO ---")
-        print(resultados_agenda)
-        print("------------------------------------------------\n")
-        
+            texto_bruto = ollama.chat(model=modelo_activo, messages=mensajes_api)['message'].get('content', '')
+        except Exception as e:
+            print(f"[ERROR OLLAMA]: {e}")
+            return "Error en núcleo.", False
+            
+    texto_bruto, cont_ext = procesar_lectura(texto_bruto)
+    if cont_ext:
         try:
-            hoy_dt = datetime.date.today()
-            manana_dt = hoy_dt + datetime.timedelta(days=1)
-            hoy_str = hoy_dt.strftime('%d-%m-%Y')
-            manana_str = manana_dt.strftime('%d-%m-%Y')
-            
-            prompt_agenda = (
-                f"El usuario pregunta: '{mensaje_usuario}'.\n"
-                f"REFERENCIA DE TIEMPO: Hoy es {hoy_str}. Mañana es {manana_str}.\n\n"
-                f"EVENTOS EXACTOS DE SU CALENDARIO:\n{resultados_agenda}\n\n"
-                "INSTRUCCIÓN CRÍTICA: "
-                "1. Busca la fecha solicitada usando la REFERENCIA DE TIEMPO. "
-                "2. Dime los eventos y sus horas para esa fecha. "
-                "3. PROHIBIDO INVENTAR. Si la fecha que pide no está en la lista de eventos, di que no tiene nada. "
-                "4. Sé directo, breve y no hagas preguntas."
-            )
-            
-            mensajes_limpios = [
-                {'role': 'system', 'content': "Eres CronOS, una IA analítica de agenda."},
-                {'role': 'user', 'content': prompt_agenda}
-            ]
-            
-            cuarta_res = ollama.chat(model=modelo_activo, messages=mensajes_limpios)
-            texto_bruto = cuarta_res['message'].get('content', texto_bruto)
-        except Exception:
-            pass
+            texto_bruto = ollama.chat(model=modelo_activo, messages=mensajes_api + [{'role': 'user', 'content': f"Datos leídos:\n{cont_ext}"}])['message'].get('content', texto_bruto)
+        except Exception as e: print(f"[ERROR lectura archivo]: {e}")
 
-    texto_bruto = re.sub(r'\[BUSCAR\s*\|\s*(.*?)\]', '', texto_bruto).strip()
-    texto_bruto = re.sub(r'\[LEER_ARCHIVO\s*\|\s*(.*?)\]', '', texto_bruto).strip()
-    texto_bruto = re.sub(r'\[?LEER_AGENDA\]?', '', texto_bruto).strip() # <-- NUEVA DEFENSA
+    texto_bruto, res_red = procesar_busqueda(texto_bruto)
+    texto_bruto, res_agenda = procesar_agenda(texto_bruto)
+    
+    if res_agenda:
+        try:
+            prompt_agenda = f"Pregunta: '{mensaje_usuario}'. Hoy: {datetime.date.today().strftime('%d-%m-%Y')}. EVENTOS EXACTOS:\n{res_agenda}\nSé directo."
+            texto_bruto = ollama.chat(model=modelo_activo, messages=[{'role': 'system', 'content': "Analista de agenda."}, {'role': 'user', 'content': prompt_agenda}])['message'].get('content', texto_bruto)
+        except Exception as e: print(f"[ERROR resolviendo agenda]: {e}")
+
+    texto_bruto = re.sub(r'\[BUSCAR\s*\|\s*(.*?)\]|\[LEER_ARCHIVO\s*\|\s*(.*?)\]|\[?LEER_AGENDA\]?', '', texto_bruto).strip()
     texto_bruto = procesar_apertura_app(texto_bruto)
     texto_bruto = procesar_control_pc(texto_bruto)
-
+    texto_bruto = procesar_correo(texto_bruto)
+    texto_bruto = procesar_captura_pantalla(texto_bruto)
+    texto_bruto = procesar_portapapeles(texto_bruto)
+    texto_bruto = procesar_diagnostico_pc(texto_bruto)
+    texto_bruto = procesar_temporizador(texto_bruto)
     texto_bruto = procesar_recuerdos(texto_bruto)
-    texto_final, accion_escritura = procesar_escritura(texto_bruto)
+    texto_final, accion_esc = procesar_escritura(texto_bruto)
     
-    historial_conversacion.append({'role': 'assistant', 'content': texto_final})
+    texto_final = texto_final.strip()
+    if not texto_final:
+        texto_final = "He procesado tu solicitud."
+        
+    texto_historial = texto_final
+    if texto_historial == "He procesado tu solicitud.":
+        texto_historial = "Comando ejecutado internamente."
+        
+    historial_conversacion.append({'role': 'assistant', 'content': texto_historial})
     if len(historial_conversacion) > MAX_MENSAJES: 
         historial_conversacion = historial_conversacion[-MAX_MENSAJES:]
+        
+    guardar_historial()
 
-    return texto_final, (accion_escritura or bool(contenido_extraido))
+    return texto_final, (accion_esc or bool(cont_ext))
+
+def pensar_stream(mensaje_usuario, modo_actual="normal"):
+    global historial_conversacion
+    
+    modelo_activo = leer_secreto("MODELO_PRINCIPAL")
+    if not modelo_activo: modelo_activo = 'qwen2.5:3b'
+    
+    fecha_actual = datetime.datetime.now().strftime("%d de %B de %Y")
+    recuerdos_actuales = cargar_memoria()
+    texto_memoria = "\n".join([f"- {r}" for r in recuerdos_actuales]) if recuerdos_actuales else "Aún no hay datos."
+    
+    instruccion_base = (
+        f"Eres CRONOS. Hoy es {fecha_actual}. RESPONDE EN ESPAÑOL.\n"
+        f"### BASE DE CONOCIMIENTO ###\n{leer_cerebro_obsidian()}\n"
+        f"### CONTEXTO ###\n{texto_memoria}\n"
+        "REGLAS:\n"
+        "1. NO menciones datos del contexto para saludar.\n"
+        "2. HERRAMIENTAS:\n"
+        "- [CREAR_ARCHIVO | nombre.ext | cont]\n"
+        "- [RECORDAR | dato]\n"
+        "- [BUSCAR | consulta]\n"
+        "- [ABRIR_APP | app]\n"
+        "- [CONTROL_PC | accion]\n"
+        "- [LEER_AGENDA]\n"
+        "- [PREPARAR_CORREO | dest | asun | cuerpo]\n"
+        "- [VER_PANTALLA]\n"
+        "- [LEER_PORTAPAPELES]\n"
+        "- [TEMPORIZADOR | min | motivo]\n"
+        "- [DIAGNOSTICO_PC]\n"
+        "DIRECTIVA CRÍTICA: Si el usuario pide una acción, usa el comando exacto. Si no, responde natural SIN comandos."
+    )
+
+    if modo_actual == "estudio": instruccion_sistema = instruccion_base + "\nModo ESTUDIO."
+    elif modo_actual == "codigo": instruccion_sistema = instruccion_base + "\nModo CÓDIGO ACTIVO."
+    else: instruccion_sistema = instruccion_base + "\nModo NORMAL."
+
+    mensajes_api = [{'role': 'system', 'content': instruccion_sistema}] + list(historial_conversacion) + [{'role': 'user', 'content': mensaje_usuario}]
+
+    imagen_detectada = obtener_imagen_reciente()
+    if imagen_detectada:
+        texto_final, accion = pensar(mensaje_usuario, modo_actual, _desde_stream=True)
+        yield f"data: {json.dumps({'texto': texto_final, 'accion': accion, 'reemplazar': True, 'fin': True})}\n\n"
+        return
+
+    try:
+        stream_res = ollama.chat(model=modelo_activo, messages=mensajes_api, stream=True)
+        es_herramienta = False
+        texto_acumulado = ""
+        
+        herramientas_conocidas = [
+            '[BUSCAR', '[CREAR_ARCHIVO', '[RECORDAR', '[ABRIR_APP',
+            '[CONTROL_PC', '[LEER_AGENDA', '[PREPARAR_CORREO',
+            '[VER_PANTALLA', '[LEER_PORTAPAPELES', '[TEMPORIZADOR', '[DIAGNOSTICO_PC'
+        ]
+
+        for chunk in stream_res:
+            contenido = chunk['message'].get('content', '')
+            if not contenido: continue
+            
+            texto_acumulado += contenido
+            
+            if len(texto_acumulado) >= 25 or (']' in texto_acumulado):
+                if any(h in texto_acumulado for h in herramientas_conocidas):
+                    es_herramienta = True
+                    break
+                else:
+                    break
+                    
+        if es_herramienta:
+            yield f"data: {json.dumps({'texto': '[EJECUTANDO HERRAMIENTA...]', 'herramienta': True})}\n\n"
+            texto_final, accion = pensar(mensaje_usuario, modo_actual, _desde_stream=True)
+            yield f"data: {json.dumps({'texto': texto_final, 'accion': accion, 'reemplazar': True, 'fin': True})}\n\n"
+        else:
+            if texto_acumulado:
+                yield f"data: {json.dumps({'texto': texto_acumulado})}\n\n"
+                
+            for chunk_resto in stream_res:
+                contenido_resto = chunk_resto['message'].get('content', '')
+                if contenido_resto:
+                    texto_acumulado += contenido_resto
+                    yield f"data: {json.dumps({'texto': contenido_resto})}\n\n"
+                    
+            historial_conversacion.append({'role': 'user', 'content': mensaje_usuario})
+            historial_conversacion.append({'role': 'assistant', 'content': texto_acumulado})
+            if len(historial_conversacion) > MAX_MENSAJES: 
+                historial_conversacion = historial_conversacion[-MAX_MENSAJES:]
+            guardar_historial()
+            
+            yield f"data: {json.dumps({'fin': True})}\n\n"
+
+    except Exception as e:
+        print(f"[ERROR STREAMING]: {e}")
+        yield f"data: {json.dumps({'texto': 'Error de streaming.', 'fin': True})}\n\n"
