@@ -590,40 +590,38 @@ def pensar_stream(mensaje_usuario, modo_actual="normal"):
         stream_res = ollama.chat(model=modelo_activo, messages=mensajes_api, stream=True)
         es_herramienta = False
         texto_acumulado = ""
+        fase_deteccion = True
         
         herramientas_conocidas = [
-            '[BUSCAR', '[CREAR_ARCHIVO', '[RECORDAR', '[ABRIR_APP',
-            '[CONTROL_PC', '[LEER_AGENDA', '[PREPARAR_CORREO',
-            '[VER_PANTALLA', '[LEER_PORTAPAPELES', '[TEMPORIZADOR', '[DIAGNOSTICO_PC'
+            '[BUSCAR', '[CREAR_ARCHIVO', '[EDITAR_ARCHIVO', '[AÑADIR_A_ARCHIVO', 
+            '[RECORDAR', '[ABRIR_APP', '[CONTROL_PC', '[LEER_AGENDA', 
+            '[PREPARAR_CORREO', '[VER_PANTALLA', '[LEER_PORTAPAPELES', 
+            '[TEMPORIZADOR', '[VER_TEMPORIZADORES', '[DIAGNOSTICO_PC', 
+            '[LISTAR_ARCHIVOS', '[BUSCAR_EN_NOTAS'
         ]
 
         for chunk in stream_res:
             contenido = chunk['message'].get('content', '')
-            if not contenido: continue
+            if not contenido: 
+                continue
             
             texto_acumulado += contenido
             
-            if len(texto_acumulado) >= 25 or (']' in texto_acumulado):
+            if fase_deteccion and (len(texto_acumulado) >= 25 or ']' in texto_acumulado):
+                fase_deteccion = False
                 if any(h in texto_acumulado for h in herramientas_conocidas):
                     es_herramienta = True
                     break
                 else:
-                    break
+                    yield f"data: {json.dumps({'texto': texto_acumulado})}\n\n"
+            elif not fase_deteccion:
+                yield f"data: {json.dumps({'texto': contenido})}\n\n"
                     
         if es_herramienta:
             yield f"data: {json.dumps({'texto': '[EJECUTANDO HERRAMIENTA...]', 'herramienta': True})}\n\n"
             texto_final, accion = pensar(mensaje_usuario, modo_actual, _desde_stream=True)
             yield f"data: {json.dumps({'texto': texto_final, 'accion': accion, 'reemplazar': True, 'fin': True})}\n\n"
         else:
-            if texto_acumulado:
-                yield f"data: {json.dumps({'texto': texto_acumulado})}\n\n"
-                
-            for chunk_resto in stream_res:
-                contenido_resto = chunk_resto['message'].get('content', '')
-                if contenido_resto:
-                    texto_acumulado += contenido_resto
-                    yield f"data: {json.dumps({'texto': contenido_resto})}\n\n"
-                    
             historial_conversacion.append({'role': 'user', 'content': mensaje_usuario})
             historial_conversacion.append({'role': 'assistant', 'content': texto_acumulado})
             if len(historial_conversacion) > MAX_MENSAJES: 
