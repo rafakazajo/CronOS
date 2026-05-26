@@ -463,6 +463,14 @@
             rec.onstart = () => { setStatus('escuchando'); btnMic.classList.add('activo'); bloquearControles(true); btnMic.disabled = false; };
             rec.onresult = (e) => { input.value = e.results[0][0].transcript; enviar(); };
             rec.onend = () => { btnMic.classList.remove('activo'); if(led.classList.contains('escuchando')) { setStatus('reposo'); bloquearControles(false); } };
+            
+            rec.onerror = (e) => {
+                console.error("Error en el micrófono:", e.error);
+                btnMic.classList.remove('activo');
+                bloquearControles(false);
+                setStatus('reposo'); 
+            };
+
             function alternarMic() { rec.start(); }
         }
     </script>

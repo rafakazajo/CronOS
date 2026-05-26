@@ -45,7 +45,11 @@ threading.Thread(target=realizar_limpieza_automatica, daemon=True).start()
 @app.before_request
 def limitar_acceso():
     if request.path.startswith('/static'): return
-    if request.remote_addr not in IPS_PERMITIDAS: abort(403)
+    
+    ip_real = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
+    
+    if ip_real not in IPS_PERMITIDAS: 
+        abort(403)
 
 @app.route('/')
 def home():
@@ -82,22 +86,32 @@ def enviar_mensaje_stream():
     modo_seleccionado = datos.get('modo', 'normal')
     modo_silencio = datos.get('silencio', False)
     
+    estado_stream = {"texto": "", "completado": False}
+    
     def generar():
-        texto_completo = ""
-        for chunk in Cerebro.pensar_stream(mensaje_usuario, modo_seleccionado):
-            yield chunk
-            try:
-                data = json.loads(chunk.replace("data: ", "").strip())
-                if data.get("reemplazar"):
-                    texto_completo = data.get("texto", "")
-                elif data.get("texto") and not data.get("herramienta"):
-                    texto_completo += data.get("texto")
-            except:
-                pass
-        if not modo_silencio and texto_completo:
-            threading.Thread(target=Boca.hablar, args=(texto_completo,)).start()
+        try:
+            for chunk in Cerebro.pensar_stream(mensaje_usuario, modo_seleccionado):
+                yield chunk
+                try:
+                    data = json.loads(chunk.replace("data: ", "").strip())
+                    if data.get("reemplazar"):
+                        estado_stream["texto"] = data.get("texto", "")
+                    elif data.get("texto") and not data.get("herramienta"):
+                        estado_stream["texto"] += data.get("texto")
+                except:
+                    pass
+            estado_stream["completado"] = True
+        except GeneratorExit:
+            pass
+
+    respuesta = Response(stream_with_context(generar()), mimetype='text/event-stream')
+    
+    @respuesta.call_on_close
+    def lanzar_audio():
+        if not modo_silencio and estado_stream["completado"] and estado_stream["texto"]:
+            threading.Thread(target=Boca.hablar, args=(estado_stream["texto"],)).start()
             
-    return Response(stream_with_context(generar()), mimetype='text/event-stream')
+    return respuesta
 
 @app.route('/subir_archivo', methods=['POST'])
 def subir_archivo():

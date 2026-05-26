@@ -5,6 +5,7 @@ Secreto.txt
 # DATOS PERSONALES Y MEMORIA
 CronOS_Archivos/
 Cerebro_CronOS/
+CronOS_Obsidian
 *.ics
 
 # ENTORNOS VIRTUALES DE PYTHON

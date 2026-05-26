@@ -39,9 +39,6 @@ def escuchar_y_transcribir():
         )
         texto = "".join([segment.text for segment in segments]).strip()
         
-        if os.path.exists(archivo_temp):
-            os.remove(archivo_temp)
-            
         if texto:
             return texto
         return None
@@ -49,6 +46,13 @@ def escuchar_y_transcribir():
     except Exception as e:
         print(f"[ERROR TRANSCRIPCIÓN]: {e}")
         return None
+        
+    finally:
+        if os.path.exists(archivo_temp):
+            try:
+                os.remove(archivo_temp)
+            except Exception:
+                pass
 
 if __name__ == "__main__":
     while True:

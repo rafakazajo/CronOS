@@ -15,6 +15,8 @@ import webbrowser
 import psutil
 import threading
 
+_cache_secretos = {}
+
 historial_conversacion = []
 MAX_MENSAJES = 10
 DIRECTORIO_SEGURO = os.path.expanduser("~/CronOS_Obsidian/Cerebro_CronOS")
@@ -93,15 +95,19 @@ def guardar_memoria(dato):
         print(f"[ERROR guardar_memoria]: {e}")
 
 def leer_secreto(clave):
-    ruta_secrets = os.path.join(DIRECTORIO_SEGURO, "Secreto.txt")
-    if os.path.exists(ruta_secrets):
-        try:
-            with open(ruta_secrets, 'r') as f:
-                for linea in f:
-                    if linea.startswith(f"{clave}="):
-                        return linea.strip().split("=", 1)[1]
-        except Exception as e:
-            print(f"[ERROR leer_secreto]: {e}")
+    if clave in _cache_secretos:
+        return _cache_secretos[clave]
+    
+    try:
+        with open("Secreto.txt", "r") as archivo:
+            for linea in archivo:
+                if linea.startswith(clave + "="):
+                    valor = linea.split("=")[1].strip()
+                    _cache_secretos[clave] = valor
+                    return valor
+    except Exception:
+        return None
+        
     return None
 
 def leer_cerebro_obsidian():
@@ -235,7 +241,7 @@ def procesar_apertura_app(texto):
     return texto_limpio
 
 def procesar_control_pc(texto):
-    patron_control = r'\[?CONTROL_PC\s*\|\s*([a-zA-Z0-9_ ]+)\]?'
+    patron_control = r'\[CONTROL_PC\s*\|\s*([a-zA-Z0-9_ ]+)\]'
     coincidencias = re.findall(patron_control, texto)
     comandos_seguros = {
         "subir volumen": ["amixer", "-q", "sset", "Master", "10%+"],
@@ -283,7 +289,7 @@ def procesar_correo(texto):
     return texto_limpio
 
 def procesar_captura_pantalla(texto):
-    patron = r'\[?VER_PANTALLA\]?'
+    patron = r'\[VER_PANTALLA\]'
     if re.search(patron, texto):
         try:
             ruta_captura = os.path.join(DIRECTORIO_SEGURO, "Imagenes", "captura.png")
@@ -296,12 +302,12 @@ def procesar_captura_pantalla(texto):
     return texto
 
 def procesar_portapapeles(texto):
-    patron = r'\[?LEER_PORTAPAPELES\]?'
+    patron = r'\[LEER_PORTAPAPELES\]'
     if re.search(patron, texto):
+        texto_limpio = re.sub(patron, '', texto).strip()
         try:
             import pyperclip
             contenido = pyperclip.paste()
-            texto_limpio = re.sub(patron, '', texto).strip()
             if contenido: return f"{texto_limpio}\nPORTAPAPELES:\n{contenido}"
         except Exception as e:
             print(f"[ERROR procesar_portapapeles]: {e}")
@@ -309,7 +315,7 @@ def procesar_portapapeles(texto):
     return texto
 
 def procesar_diagnostico_pc(texto):
-    patron = r'\[?DIAGNOSTICO_PC\]?'
+    patron = r'\[DIAGNOSTICO_PC\]'
     if re.search(patron, texto):
         print("[*] CronOS analizando salud con psutil...")
         try:
@@ -341,7 +347,7 @@ def temporizador_hilo(segundos, mensaje):
         print(f"[ERROR temporizador_hilo]: {e}")
 
 def procesar_temporizador(texto):
-    patron = r'\[?(?:TEMPORIZADOR|PROGRAMAR_ALERTA)\s*\|\s*(\d+)\s*\|\s*([^\]]+)\]?'
+    patron = r'\[(?:TEMPORIZADOR|PROGRAMAR_ALERTA)\s*\|\s*(\d+)\s*\|\s*([^\]]+)\]'
     coincidencias = re.findall(patron, texto)
     confirmaciones = ""
     for minutos, motivo in coincidencias:
@@ -355,28 +361,39 @@ def procesar_temporizador(texto):
     if confirmaciones: return f"{texto_limpio} {confirmaciones}".strip()
     return texto_limpio
 
+def _descargar_calendario_en_segundo_plano(url, ruta_ics):
+    try:
+        respuesta = requests.get(url, timeout=3)
+        respuesta.raise_for_status()
+        with open(ruta_ics, 'wb') as f:
+            f.write(respuesta.content)
+    except Exception as e:
+        print(f"[ERROR descarga calendario en segundo plano]: {e}")
+
 def leer_eventos_calendario():
     ruta_ics = os.path.join(DIRECTORIO_SEGURO, "mi_agenda.ics")
     url_google = leer_secreto("CALENDAR_URL")
-    
+
     if url_google:
-        try:
-            respuesta = requests.get(url_google, timeout=5)
-            respuesta.raise_for_status()
-            with open(ruta_ics, 'wb') as f:
-                f.write(respuesta.content)
-        except Exception as e:
-            print(f"[ERROR descargar calendario]: {e}")
-            
-    if not os.path.exists(ruta_ics): return "No hay archivo de agenda."
-    
+        hilo = threading.Thread(
+            target=_descargar_calendario_en_segundo_plano,
+            args=(url_google, ruta_ics),
+            daemon=True
+        )
+        hilo.start()
+        hilo.join(timeout=2)
+
+    if not os.path.exists(ruta_ics):
+        return "No hay archivo de agenda."
+
     try:
         from icalendar import Calendar
-        with open(ruta_ics, 'rb') as f: cal = Calendar.from_ical(f.read())
+        with open(ruta_ics, 'rb') as f:
+            cal = Calendar.from_ical(f.read())
         zona_espana = pytz.timezone('Europe/Madrid')
         hoy = datetime.date.today()
         eventos_expandidos = recurring_ical_events.of(cal).between(hoy, hoy + datetime.timedelta(days=30))
-        
+
         eventos_raw = []
         for component in eventos_expandidos:
             dtstart_raw = component.get('dtstart')
@@ -389,11 +406,12 @@ def leer_eventos_calendario():
                 else:
                     fecha_matematica = zona_espana.localize(datetime.datetime.combine(dt_val, datetime.time.min))
                     fecha_str = dt_val.strftime('%d-%m-%Y (Todo el día)')
-                
+
                 if fecha_matematica.date() >= hoy:
                     eventos_raw.append((fecha_matematica, f"- {fecha_str}: {component.get('summary', 'Evento')}"))
-        
-        if not eventos_raw: return "La agenda está libre."
+
+        if not eventos_raw:
+            return "La agenda está libre."
         eventos_raw.sort(key=lambda x: x[0])
         eventos_finales = list(dict.fromkeys([texto for _, texto in eventos_raw]))
         return "Eventos:\n" + "\n".join(eventos_finales[:7])
@@ -402,14 +420,14 @@ def leer_eventos_calendario():
         return "Error al procesar calendario."
 
 def procesar_agenda(texto):
-    patron = r'\[?LEER_AGENDA\]?'
+    patron = r'\[LEER_AGENDA\]'
     if re.search(patron, texto):
         eventos = leer_eventos_calendario()
         return re.sub(patron, '', texto).strip(), eventos
     return texto, None
 
 def procesar_recuerdos(texto):
-    patron = r'\[?RECORDAR\s*\|\s*([^\n\]]+)\]?'
+    patron = r'\[RECORDAR\s*\|\s*([^\n\]]+)\]'
     for dato in re.findall(patron, texto): guardar_memoria(dato.strip())
     return re.sub(patron, '', texto).strip()
 
@@ -432,13 +450,7 @@ def codificar_imagen_base64(ruta):
         print(f"[ERROR base64_img]: {e}")
     return None
 
-def pensar(mensaje_usuario, modo_actual="normal", _desde_stream=False):
-    global historial_conversacion
-    os.makedirs(DIRECTORIO_SEGURO, exist_ok=True)
-    
-    modelo_activo = leer_secreto("MODELO_PRINCIPAL")
-    if not modelo_activo: modelo_activo = 'qwen2.5:3b'
-    
+def _construir_prompt_sistema(modo_actual):
     fecha_actual = datetime.datetime.now().strftime("%d de %B de %Y")
     recuerdos_actuales = cargar_memoria()
     texto_memoria = "\n".join([f"- {r}" for r in recuerdos_actuales]) if recuerdos_actuales else "Aún no hay datos."
@@ -464,16 +476,32 @@ def pensar(mensaje_usuario, modo_actual="normal", _desde_stream=False):
         "DIRECTIVA CRÍTICA: Si el usuario pide una acción, usa el comando exacto. Si el usuario solo está charlando (ej: te dice 'Hola'), responde de forma natural SIN usar comandos."
     )
 
-    if modo_actual == "estudio": instruccion_sistema = instruccion_base + "\nModo ESTUDIO."
-    elif modo_actual == "codigo": instruccion_sistema = instruccion_base + "\nModo CÓDIGO ACTIVO: MUESTRA CÓDIGO DIRECTO."
-    else: instruccion_sistema = instruccion_base + "\nModo NORMAL."
+    if modo_actual == "estudio": 
+        return instruccion_base + "\nModo ESTUDIO."
+    elif modo_actual == "codigo": 
+        return instruccion_base + "\nModo CÓDIGO ACTIVO: MUESTRA CÓDIGO DIRECTO."
+    else: 
+        return instruccion_base + "\nModo NORMAL."
+
+def pensar(mensaje_usuario, modo_actual="normal", _desde_stream=False):
+    global historial_conversacion
+    os.makedirs(DIRECTORIO_SEGURO, exist_ok=True)
+    
+    modelo_activo = leer_secreto("MODELO_PRINCIPAL")
+    if not modelo_activo: modelo_activo = 'qwen2.5:3b'
+    
+    instruccion_sistema = _construir_prompt_sistema(modo_actual)
 
     if not _desde_stream:
         historial_conversacion.append({'role': 'user', 'content': mensaje_usuario})
         
     mensajes_api = [{'role': 'system', 'content': instruccion_sistema}] + list(historial_conversacion)
         
+    texto_bruto = "" 
+    fallo_vision = False 
+    
     imagen_detectada = obtener_imagen_reciente()
+    
     if imagen_detectada:
         imagen_b64 = codificar_imagen_base64(imagen_detectada)
         if imagen_b64:
@@ -492,9 +520,11 @@ def pensar(mensaje_usuario, modo_actual="normal", _desde_stream=False):
                     texto_bruto = ollama.chat(model=modelo_activo, messages=mensajes_traduccion)['message'].get('content', texto_bruto)
             except Exception as e:
                 print(f"[ERROR VISUAL]: {e}")
-                texto_bruto = "Error visual."
-    
-    if not imagen_detectada:
+                fallo_vision = True
+        else:
+            fallo_vision = True
+
+    if not imagen_detectada or fallo_vision:
         try:
             texto_bruto = ollama.chat(model=modelo_activo, messages=mensajes_api)['message'].get('content', '')
         except Exception as e:
@@ -508,6 +538,14 @@ def pensar(mensaje_usuario, modo_actual="normal", _desde_stream=False):
         except Exception as e: print(f"[ERROR lectura archivo]: {e}")
 
     texto_bruto, res_red = procesar_busqueda(texto_bruto)
+    
+    if res_red:
+        try:
+            prompt_busqueda = f"Responde a '{mensaje_usuario}' usando estrictamente esta información reciente de internet:\n{res_red}"
+            texto_bruto = ollama.chat(model=modelo_activo, messages=mensajes_api + [{'role': 'user', 'content': prompt_busqueda}])['message'].get('content', texto_bruto)
+        except Exception as e: 
+            print(f"[ERROR resolviendo búsqueda]: {e}")
+
     texto_bruto, res_agenda = procesar_agenda(texto_bruto)
     
     if res_agenda:
@@ -516,7 +554,7 @@ def pensar(mensaje_usuario, modo_actual="normal", _desde_stream=False):
             texto_bruto = ollama.chat(model=modelo_activo, messages=[{'role': 'system', 'content': "Analista de agenda."}, {'role': 'user', 'content': prompt_agenda}])['message'].get('content', texto_bruto)
         except Exception as e: print(f"[ERROR resolviendo agenda]: {e}")
 
-    texto_bruto = re.sub(r'\[BUSCAR\s*\|\s*(.*?)\]|\[LEER_ARCHIVO\s*\|\s*(.*?)\]|\[?LEER_AGENDA\]?', '', texto_bruto).strip()
+    texto_bruto = re.sub(r'\[BUSCAR\s*\|\s*(.*?)\]|\[LEER_ARCHIVO\s*\|\s*(.*?)\]|\[LEER_AGENDA\]', '', texto_bruto).strip()
     texto_bruto = procesar_apertura_app(texto_bruto)
     texto_bruto = procesar_control_pc(texto_bruto)
     texto_bruto = procesar_correo(texto_bruto)
@@ -549,39 +587,13 @@ def pensar_stream(mensaje_usuario, modo_actual="normal"):
     modelo_activo = leer_secreto("MODELO_PRINCIPAL")
     if not modelo_activo: modelo_activo = 'qwen2.5:3b'
     
-    fecha_actual = datetime.datetime.now().strftime("%d de %B de %Y")
-    recuerdos_actuales = cargar_memoria()
-    texto_memoria = "\n".join([f"- {r}" for r in recuerdos_actuales]) if recuerdos_actuales else "Aún no hay datos."
-    
-    instruccion_base = (
-        f"Eres CRONOS. Hoy es {fecha_actual}. RESPONDE EN ESPAÑOL.\n"
-        f"### BASE DE CONOCIMIENTO ###\n{leer_cerebro_obsidian()}\n"
-        f"### CONTEXTO ###\n{texto_memoria}\n"
-        "REGLAS:\n"
-        "1. NO menciones datos del contexto para saludar.\n"
-        "2. HERRAMIENTAS:\n"
-        "- [CREAR_ARCHIVO | nombre.ext | cont]\n"
-        "- [RECORDAR | dato]\n"
-        "- [BUSCAR | consulta]\n"
-        "- [ABRIR_APP | app]\n"
-        "- [CONTROL_PC | accion]\n"
-        "- [LEER_AGENDA]\n"
-        "- [PREPARAR_CORREO | dest | asun | cuerpo]\n"
-        "- [VER_PANTALLA]\n"
-        "- [LEER_PORTAPAPELES]\n"
-        "- [TEMPORIZADOR | min | motivo]\n"
-        "- [DIAGNOSTICO_PC]\n"
-        "DIRECTIVA CRÍTICA: Si el usuario pide una acción, usa el comando exacto. Si no, responde natural SIN comandos."
-    )
-
-    if modo_actual == "estudio": instruccion_sistema = instruccion_base + "\nModo ESTUDIO."
-    elif modo_actual == "codigo": instruccion_sistema = instruccion_base + "\nModo CÓDIGO ACTIVO."
-    else: instruccion_sistema = instruccion_base + "\nModo NORMAL."
+    instruccion_sistema = _construir_prompt_sistema(modo_actual)
 
     mensajes_api = [{'role': 'system', 'content': instruccion_sistema}] + list(historial_conversacion) + [{'role': 'user', 'content': mensaje_usuario}]
 
     imagen_detectada = obtener_imagen_reciente()
     if imagen_detectada:
+        historial_conversacion.append({'role': 'user', 'content': mensaje_usuario})
         texto_final, accion = pensar(mensaje_usuario, modo_actual, _desde_stream=True)
         yield f"data: {json.dumps({'texto': texto_final, 'accion': accion, 'reemplazar': True, 'fin': True})}\n\n"
         return
@@ -619,6 +631,7 @@ def pensar_stream(mensaje_usuario, modo_actual="normal"):
                     
         if es_herramienta:
             yield f"data: {json.dumps({'texto': '[EJECUTANDO HERRAMIENTA...]', 'herramienta': True})}\n\n"
+            historial_conversacion.append({'role': 'user', 'content': mensaje_usuario})
             texto_final, accion = pensar(mensaje_usuario, modo_actual, _desde_stream=True)
             yield f"data: {json.dumps({'texto': texto_final, 'accion': accion, 'reemplazar': True, 'fin': True})}\n\n"
         else:
