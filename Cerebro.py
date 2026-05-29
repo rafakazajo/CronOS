@@ -224,6 +224,37 @@ def procesar_apertura_app(texto):
     }
     acciones = ""
     for app in coincidencias:
+        urls_directas = {
+            "youtube": "https://www.youtube.com",
+            "gmail": "https://mail.google.com",
+            "google": "https://www.google.com",
+            "github": "https://www.github.com",
+            "spotify": "https://open.spotify.com",
+            "whatsapp": "https://web.whatsapp.com",
+            "calendario": "https://calendar.google.com",
+            "drive": "https://drive.google.com",
+            "maps": "https://maps.google.com",
+            "wikipedia": "https://www.wikipedia.org",
+        }
+
+        url = next((u for clave, u in urls_directas.items() if clave in app_limpia), None)
+        if url:
+            try:
+                webbrowser.open(url)
+                acciones += f"He abierto {url} en el navegador. "
+                continue
+            except Exception as e:
+                print(f"[ERROR abrir URL]: {e}")
+
+        if "busca" in app_limpia or "buscar" in app_limpia:
+            consulta = re.sub(r'busca(r)?\s*(en\s*google\s*)?', '', app_limpia).strip()
+            if consulta:
+                try:
+                    webbrowser.open(f"https://www.google.com/search?q={urllib.parse.quote(consulta)}")
+                    acciones += f"He buscado '{consulta}' en Google. "
+                    continue
+                except Exception as e:
+                    print(f"[ERROR búsqueda]: {e}")
         app_limpia = app.strip().lower()
         comando = next((cmd for clave, cmd in apps_seguras.items() if clave in app_limpia), None)
         if comando:
@@ -465,7 +496,7 @@ def _construir_prompt_sistema(modo_actual):
         "- [CREAR_ARCHIVO | nombre.ext | cont]\n"
         "- [RECORDAR | dato]\n"
         "- [BUSCAR | consulta]\n"
-        "- [ABRIR_APP | app]\n"
+        "- [ABRIR_APP | app o 'busca X en google']\n"
         "- [CONTROL_PC | accion]\n"
         "- [LEER_AGENDA]\n"
         "- [PREPARAR_CORREO | dest | asun | cuerpo]\n"
@@ -474,6 +505,7 @@ def _construir_prompt_sistema(modo_actual):
         "- [TEMPORIZADOR | min | motivo]\n"
         "- [DIAGNOSTICO_PC]\n"
         "DIRECTIVA CRÍTICA: Si el usuario pide una acción, usa el comando exacto. Si el usuario solo está charlando (ej: te dice 'Hola'), responde de forma natural SIN usar comandos."
+        "3. RESPUESTAS PARA VOZ: Sé conciso. Máximo 3 frases por respuesta salvo que el usuario pida explícitamente más detalle. Sin listas con viñetas, sin markdown, solo texto natural hablado.\n"
     )
 
     if modo_actual == "estudio": 
@@ -580,69 +612,3 @@ def pensar(mensaje_usuario, modo_actual="normal", _desde_stream=False):
     guardar_historial()
 
     return texto_final, (accion_esc or bool(cont_ext))
-
-def pensar_stream(mensaje_usuario, modo_actual="normal"):
-    global historial_conversacion
-    
-    modelo_activo = leer_secreto("MODELO_PRINCIPAL")
-    if not modelo_activo: modelo_activo = 'qwen2.5:3b'
-    
-    instruccion_sistema = _construir_prompt_sistema(modo_actual)
-
-    mensajes_api = [{'role': 'system', 'content': instruccion_sistema}] + list(historial_conversacion) + [{'role': 'user', 'content': mensaje_usuario}]
-
-    imagen_detectada = obtener_imagen_reciente()
-    if imagen_detectada:
-        historial_conversacion.append({'role': 'user', 'content': mensaje_usuario})
-        texto_final, accion = pensar(mensaje_usuario, modo_actual, _desde_stream=True)
-        yield f"data: {json.dumps({'texto': texto_final, 'accion': accion, 'reemplazar': True, 'fin': True})}\n\n"
-        return
-
-    try:
-        stream_res = ollama.chat(model=modelo_activo, messages=mensajes_api, stream=True)
-        es_herramienta = False
-        texto_acumulado = ""
-        fase_deteccion = True
-        
-        herramientas_conocidas = [
-            '[BUSCAR', '[CREAR_ARCHIVO', '[EDITAR_ARCHIVO', '[AÑADIR_A_ARCHIVO', 
-            '[RECORDAR', '[ABRIR_APP', '[CONTROL_PC', '[LEER_AGENDA', 
-            '[PREPARAR_CORREO', '[VER_PANTALLA', '[LEER_PORTAPAPELES', 
-            '[TEMPORIZADOR', '[VER_TEMPORIZADORES', '[DIAGNOSTICO_PC', 
-            '[LISTAR_ARCHIVOS', '[BUSCAR_EN_NOTAS'
-        ]
-
-        for chunk in stream_res:
-            contenido = chunk['message'].get('content', '')
-            if not contenido: 
-                continue
-            
-            texto_acumulado += contenido
-            
-            if fase_deteccion and (len(texto_acumulado) >= 25 or ']' in texto_acumulado):
-                fase_deteccion = False
-                if any(h in texto_acumulado for h in herramientas_conocidas):
-                    es_herramienta = True
-                    break
-                else:
-                    yield f"data: {json.dumps({'texto': texto_acumulado})}\n\n"
-            elif not fase_deteccion:
-                yield f"data: {json.dumps({'texto': contenido})}\n\n"
-                    
-        if es_herramienta:
-            yield f"data: {json.dumps({'texto': '[EJECUTANDO HERRAMIENTA...]', 'herramienta': True})}\n\n"
-            historial_conversacion.append({'role': 'user', 'content': mensaje_usuario})
-            texto_final, accion = pensar(mensaje_usuario, modo_actual, _desde_stream=True)
-            yield f"data: {json.dumps({'texto': texto_final, 'accion': accion, 'reemplazar': True, 'fin': True})}\n\n"
-        else:
-            historial_conversacion.append({'role': 'user', 'content': mensaje_usuario})
-            historial_conversacion.append({'role': 'assistant', 'content': texto_acumulado})
-            if len(historial_conversacion) > MAX_MENSAJES: 
-                historial_conversacion = historial_conversacion[-MAX_MENSAJES:]
-            guardar_historial()
-            
-            yield f"data: {json.dumps({'fin': True})}\n\n"
-
-    except Exception as e:
-        print(f"[ERROR STREAMING]: {e}")
-        yield f"data: {json.dumps({'texto': 'Error de streaming.', 'fin': True})}\n\n"

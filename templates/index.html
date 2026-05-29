@@ -2,477 +2,462 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>CronOS</title>
-    <link rel="icon" href="/static/Logo_sin_fondo.png">
-    <link href="https://cdn.jsdelivr.net/npm/comic-mono@0.0.1/index.css" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CronOS UI</title>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
         :root {
-            --bg-color: #0f0f0f; --chat-bg: #1a1a1a; --header-bg: #232323;
-            --user-msg: #2b3a42; --cronos-msg: #2a2a2a;
-            --core-reposo: #546e7a; --core-escuchar: #3498db; --core-pensar: #2ecc71;
-            --core-hablar: #9b59b6; --core-trabajar: #f1c40f;
-            --core-vision: #1e3799; 
+            --bg: #080808;
+            --c-idle: #546e7a;
+            --c-listen: #3498db;
+            --c-think: #2ecc71;
+            --c-talk: #9b59b6;
+            --c-work: #f1c40f;
         }
-
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: var(--bg-color); border-radius: 10px; }
-        ::-webkit-scrollbar-thumb { background: #3a4a52; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: var(--core-escuchar); }
-
-        body { 
-            font-family: 'Comic Mono', monospace; 
-            background-color: var(--chat-bg);
-            color: #e0e0e0; 
-            margin: 0; 
+        body {
+            font-family: 'Share Tech Mono', 'Courier New', monospace;
+            background: var(--bg);
+            margin: 0;
+            overflow: hidden;
             height: 100vh;
             width: 100vw;
-            overflow: hidden; 
+            color: white;
+            user-select: none;
+        }
+        #pantalla1, #pantalla2 {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            transition: transform 0.4s ease-in-out, opacity 0.4s ease-in-out;
+        }
+        #pantalla1 {
+            background: var(--bg);
+            background-image: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+            background-size: 30px 30px;
             display: flex;
             flex-direction: column;
+            align-items: center;
+            justify-content: center;
         }
-
-        .chat-container { 
-            width: 100%; 
-            max-width: none;
-            height: 100%; 
-            background: var(--chat-bg); 
-            border-radius: 0;
-            border: none;
-            display: flex; 
-            flex-direction: column; 
-            box-shadow: none;
-        }
-        
-        .mensaje { max-width: 90%; }
-        @media (min-width: 768px) {
-            .mensaje { max-width: 70%; }
-            .input-wrapper { padding-left: 15%; padding-right: 15%; }
-        }
-
-        .header { background: var(--header-bg); padding: 18px; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 15px; border-bottom: 1px solid #333; position: relative; letter-spacing: 2px; }
-        .logo-wrapper { position: absolute; left: 20px; top: 50%; transform: translateY(-50%); width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; }
-        .logo-cronos { max-width: 100%; max-height: 100%; object-fit: contain; filter: drop-shadow(0 0 5px rgba(255,255,255,0.2)); animation: flotar 3s ease-in-out infinite; }
-        @keyframes flotar { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
-
-        .status-dot { width: 14px; height: 14px; border-radius: 50%; transition: 0.3s; position: relative; }
-        .status-dot.reposo { background: var(--core-reposo); box-shadow: 0 0 10px var(--core-reposo); }
-        .status-dot.pensando { background: var(--core-pensar); }
-        .status-dot.pensando::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: var(--core-pensar); animation: ondas 1.2s infinite; }
-        @keyframes ondas { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(3.5); opacity: 0; } }
-
-        .status-dot.trabajando { background: var(--core-trabajar); box-shadow: 0 0 15px var(--core-trabajar); border: 2px dashed #000; animation: girar 1s linear infinite; }
-        @keyframes girar { 100% { transform: rotate(360deg); } }
-
-        .status-dot.hablando { background: var(--core-hablar); animation: latido 0.4s infinite alternate; }
-        @keyframes latido { from { transform: scale(1); } to { transform: scale(1.4); } }
-        
-        .status-dot.escuchando { background: var(--core-escuchar); box-shadow: 0 0 15px var(--core-escuchar); animation: pulso-mic 0.6s infinite alternate; }
-        @keyframes pulso-mic { from { transform: scale(1); opacity: 1; } to { transform: scale(1.4); opacity: 0.6; } }
-
-        .status-dot.vision { 
-            background: var(--core-vision); 
-            box-shadow: 0 0 15px var(--core-vision); 
-            animation: pulso-vision 1.5s infinite alternate ease-in-out; 
-        }
-        @keyframes pulso-vision { 
-            0% { transform: scale(0.85); box-shadow: 0 0 5px var(--core-vision); opacity: 0.7; } 
-            100% { transform: scale(1.3); box-shadow: 0 0 25px var(--core-vision), inset 0 0 5px rgba(255,255,255,0.5); opacity: 1; } 
-        }
-
-        .chat-box { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; scroll-behavior: smooth; }
-        .mensaje { max-width: 85%; padding: 14px 20px; border-radius: 25px; opacity: 0; transform: translateY(20px); animation: aparecer 0.4s forwards; white-space: pre-wrap; word-wrap: break-word; }        @keyframes aparecer { to { opacity: 1; transform: translateY(0); } }
-        .mensaje.usuario { background: var(--user-msg); align-self: flex-end; border-bottom-right-radius: 5px; border: 1px solid #3a4a52; }
-        .mensaje.cronos { background: var(--cronos-msg); align-self: flex-start; border-bottom-left-radius: 5px; border: 1px solid #333; }
-
-        .wave-loader { display: flex; gap: 4px; align-items: center; height: 25px; padding: 5px 0; }
-        .wave-loader span { width: 4px; height: 12px; background: var(--core-pensar); border-radius: 2px; animation: wave 1s infinite ease-in-out; }
-        .wave-loader span:nth-child(1) { animation-delay: 0.1s; }
-        .wave-loader span:nth-child(2) { animation-delay: 0.2s; }
-        .wave-loader span:nth-child(3) { animation-delay: 0.3s; }
-        .wave-loader span:nth-child(4) { animation-delay: 0.4s; }
-        .wave-loader span:nth-child(5) { animation-delay: 0.5s; }
-        .wave-loader span:nth-child(6) { animation-delay: 0.6s; }
-        @keyframes wave { 0%, 100% { height: 8px; opacity: 0.5; } 50% { height: 22px; opacity: 1; } }
-
-        .work-loader { display: flex; gap: 6px; align-items: center; height: 25px; }
-        .work-loader span { width: 8px; height: 8px; background: var(--core-trabajar); border-radius: 50%; animation: pulse-work 0.6s infinite alternate; }
-        .work-loader span:nth-child(2) { animation-delay: 0.2s; }
-        .work-loader span:nth-child(3) { animation-delay: 0.4s; }
-        @keyframes pulse-work { from { transform: scale(1); opacity: 1; } to { transform: scale(1.5); opacity: 0.3; } }
-
-        .controls { padding: 10px 20px; background: transparent; display: flex; justify-content: flex-end; }
-        .custom-dropdown { position: relative; display: inline-block; }
-        
-        .dropdown-selected {
-            background-color: #222;
-            color: #eee;
-            border: 1px solid #444;
-            padding: 8px 35px 8px 18px;
-            border-radius: 20px;
-            font-size: 13px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23aaaaaa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-            background-repeat: no-repeat;
-            background-position: right 12px center;
-            background-size: 14px;
-        }
-        
-        .dropdown-selected:hover { border-color: var(--core-escuchar); box-shadow: 0 0 10px rgba(52, 152, 219, 0.2); }
-        
-        .dropdown-options {
-            position: absolute;
-            bottom: 120%;
-            right: 0;
-            background-color: #222;
-            min-width: 120px;
-            border-radius: 15px;
-            border: 1px solid #444;
-            overflow: hidden;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        #pantalla1.oculto {
+            transform: translateX(-100%);
             opacity: 0;
-            visibility: hidden;
-            transform: translateY(20px);
-            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            z-index: 100;
+            pointer-events: none;
         }
-        
-        .dropdown-options.show {
+        #pantalla2 {
+            background: #060606;
+            display: flex;
+            flex-direction: column;
+            transform: translateX(100%);
+            opacity: 0;
+            pointer-events: none;
+        }
+        #pantalla2.activo {
+            transform: translateX(0);
             opacity: 1;
-            visibility: visible;
-            transform: translateY(0);
+            pointer-events: auto;
+        }
+        .corner {
+            position: absolute; width: 40px; height: 40px;
+            border: 2px solid rgba(52, 152, 219, 0.15);
+            pointer-events: none;
+        }
+        .corner.tl { top: 20px; left: 20px; border-right: none; border-bottom: none; }
+        .corner.tr { top: 20px; right: 20px; border-left: none; border-bottom: none; }
+        .corner.bl { bottom: 20px; left: 20px; border-right: none; border-top: none; }
+        .corner.br { bottom: 20px; right: 20px; border-left: none; border-top: none; }
+        .btn-flotante {
+            position: absolute; top: 14px; left: 14px;
+            width: 34px; height: 34px; background: #111;
+            border: 1px solid #2a3a42; border-radius: 7px;
+            cursor: pointer; z-index: 100; transition: border 0.3s, box-shadow 0.3s;
+        }
+        .btn-flotante:hover { border-color: #3498db; box-shadow: 0 0 10px rgba(52, 152, 219, 0.3); }
+        .badge-modelo {
+            position: absolute; top: 20px; right: 38px;
+            font-size: 8px; letter-spacing: 1.5px;
+            color: #4da8da;
+            border: 1px solid #2a5a75;
+            border-radius: 3px; padding: 3px 6px;
+        }
+        .badge-version {
+            position: absolute; bottom: 20px; left: 50%;
+            transform: translateX(-50%);
+            font-size: 9px; letter-spacing: 3px;
+            color: #5d8aa8;
+            text-transform: uppercase;
+        }
+        .core-container { display: flex; flex-direction: column; align-items: center; gap: 24px; }
+        .logo-tactil {
+            position: relative; width: 350px; height: 350px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            border-radius: 50%;
+            transition: transform 0.2s ease-in-out;
+            -webkit-tap-highlight-color: transparent;
         }
         
-        .dropdown-options div {
-            padding: 10px 18px;
-            color: #eee;
+        .logo-tactil:hover { transform: scale(1.05); }
+        .logo-tactil:active { transform: scale(0.92); }
+
+        .aura {
+            position: absolute; width: 350px; height: 350px;
+            border-radius: 50%; pointer-events: none; transition: box-shadow 0.5s;
+        }
+
+        #logo-btn {
             cursor: pointer;
-            font-size: 13px;
-            transition: 0.2s;
+            -webkit-tap-highlight-color: transparent;
+            transition: transform 0.15s ease;
         }
+        #logo-btn:active {
+            transform: scale(0.93);
+        }
+        .core-container.escuchando #logo-btn,
+        .core-container.pensando #logo-btn,
+        .core-container.hablando #logo-btn,
+        .core-container.ejecutando #logo-btn {
+            cursor: not-allowed;
+            pointer-events: none;
+            opacity: 0.85;
+        }
+
+        #btn-cancelar {
+            display: none; 
+            position: absolute; 
+            bottom: 80px; 
+            left: 50%;
+            transform: translateX(-50%); 
+            padding: 10px 20px;
+            background: #ff0033; 
+            color: white; 
+            border-radius: 20px;
+            cursor: pointer; 
+            z-index: 101; 
+            font-size: 12px;
+        }
+        .core-container.escuchando #btn-cancelar { 
+            display: block !important; 
+        }
+        .logo-svg { width: 270px; height: 270px; position: relative; z-index: 2; }
+        .logo-svg path { fill: none; stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; transition: stroke 0.3s; }
+        .info-container { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+        .estado-texto { font-size: 13px; letter-spacing: 5px; text-transform: uppercase; transition: color 0.3s; }
+        .ecualizador { display: flex; gap: 4px; align-items: flex-end; height: 20px; }
+        .barra { width: 3px; background: currentColor; border-radius: 1px; min-height: 3px; }
+        #core.reposo .estado-texto, #core.reposo .barra { color: var(--c-idle); }
+        #core.reposo .aura { box-shadow: 0 0 20px rgba(84,110,122,0.07); }
+        #core.reposo .logo-svg path { stroke: var(--c-idle); stroke-dasharray: 900; stroke-dashoffset: 900; animation: draw-path 3.5s infinite; }
+        #core.reposo .logo-svg path:nth-child(1) { animation-delay: 0.07s; } #core.reposo .logo-svg path:nth-child(2) { animation-delay: 0.14s; }
+        #core.reposo .logo-svg path:nth-child(3) { animation-delay: 0.21s; } #core.reposo .logo-svg path:nth-child(4) { animation-delay: 0.28s; }
+        #core.reposo .logo-svg path:nth-child(5) { animation-delay: 0.35s; } #core.reposo .logo-svg path:nth-child(6) { animation-delay: 0.42s; }
+        #core.reposo .logo-svg path:nth-child(7) { animation-delay: 0.49s; } #core.reposo .logo-svg path:nth-child(8) { animation-delay: 0.56s; }
+        #core.reposo .logo-svg path:nth-child(9) { animation-delay: 0.63s; } #core.reposo .logo-svg path:nth-child(10) { animation-delay: 0.70s; }
+        #core.reposo .logo-svg path:nth-child(11) { animation-delay: 0.77s; }
+        @keyframes draw-path { 0%{stroke-dashoffset:900;opacity:0.15} 60%{stroke-dashoffset:0;opacity:1} 85%{stroke-dashoffset:0;opacity:1} 100%{stroke-dashoffset:-900;opacity:0.15} }
+        #core.reposo .barra { animation: eq-wave 3s infinite; }
+        @keyframes eq-wave { 0%,100%{height:3px;opacity:0.4} 50%{height:9px;opacity:1} }
+        #core.reposo .barra:nth-child(1){animation-delay:0s} #core.reposo .barra:nth-child(2){animation-delay:0.25s}
+        #core.reposo .barra:nth-child(3){animation-delay:0.5s} #core.reposo .barra:nth-child(4){animation-delay:0.75s}
+        #core.reposo .barra:nth-child(5){animation-delay:1s} #core.reposo .barra:nth-child(6){animation-delay:1.25s}
+        #core.reposo .barra:nth-child(7){animation-delay:1.5s} #core.reposo .barra:nth-child(8){animation-delay:1.75s}
+        #core.escuchando .estado-texto { color: var(--c-listen); animation: blink 1.4s infinite; }
+        #core.escuchando .barra { color: var(--c-listen); }
+        #core.escuchando .aura { animation: ap-b 1.4s infinite; }
+        @keyframes ap-b { 0%,100%{box-shadow:0 0 20px rgba(52,152,219,0.1)} 50%{box-shadow:0 0 65px rgba(52,152,219,0.38)} }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.4} }
+        #core.escuchando .logo-svg { animation: pendulum 2s ease-in-out infinite; }
+        #core.escuchando .logo-svg path { stroke: var(--c-listen); }
+        @keyframes pendulum { 0%,100%{transform:rotate(-8deg)} 50%{transform:rotate(8deg)} }
+        #core.escuchando .barra { animation: eq-radar 1.2s infinite; }
+        @keyframes eq-radar { 0%{height:3px;opacity:0.3} 35%{height:18px;opacity:1} 70%,100%{height:3px;opacity:0.3} }
+        #core.escuchando .barra:nth-child(4), #core.escuchando .barra:nth-child(5) { animation-delay: 0s; }
+        #core.escuchando .barra:nth-child(3), #core.escuchando .barra:nth-child(6) { animation-delay: 0.14s; }
+        #core.escuchando .barra:nth-child(2), #core.escuchando .barra:nth-child(7) { animation-delay: 0.28s; }
+        #core.escuchando .barra:nth-child(1), #core.escuchando .barra:nth-child(8) { animation-delay: 0.42s; }
+        #core.pensando .estado-texto, #core.pensando .barra { color: var(--c-think); }
+        #core.pensando .aura { animation: ap-g 1s infinite; }
+        @keyframes ap-g { 0%,100%{box-shadow:0 0 20px rgba(46,204,113,0.08)} 50%{box-shadow:0 0 70px rgba(46,204,113,0.3)} }
+        #core.pensando .logo-svg { animation: spin 9s linear infinite; }
+        #core.pensando .logo-svg path { stroke: var(--c-think); }
+        @keyframes spin { to{transform:rotate(360deg)} }
+        #core.pensando .barra { animation: eq-sym 1.2s alternate infinite; }
+        @keyframes eq-sym { from{height:3px} to{height:16px} }
+        #core.pensando .barra:nth-child(1), #core.pensando .barra:nth-child(8) { animation-delay: 0s; }
+        #core.pensando .barra:nth-child(2), #core.pensando .barra:nth-child(7) { animation-delay: 0.2s; }
+        #core.pensando .barra:nth-child(3), #core.pensando .barra:nth-child(6) { animation-delay: 0.4s; }
+        #core.pensando .barra:nth-child(4), #core.pensando .barra:nth-child(5) { animation-delay: 0.6s; }
+        #core.hablando .estado-texto, #core.hablando .barra { color: var(--c-talk); }
+        #core.hablando .aura { animation: ap-p 0.5s infinite; }
+        @keyframes ap-p { 0%,100%{box-shadow:0 0 30px rgba(155,89,182,0.2)} 50%{box-shadow:0 0 80px rgba(155,89,182,0.5)} }
+        #core.hablando .logo-svg { animation: triple-pulse 1.8s ease-in-out infinite; }
+        #core.hablando .logo-svg path { stroke: var(--c-talk); }
+        @keyframes triple-pulse { 0%{transform:scale(1)} 8%{transform:scale(1.08)} 16%{transform:scale(1)} 24%{transform:scale(1.05)} 32%{transform:scale(1)} 40%{transform:scale(1.1)} 48%{transform:scale(1)} 100%{transform:scale(1)} }
+        #core.hablando .barra { animation: eq-silab 1.6s infinite; }
+        @keyframes eq-silab { 0%,100%{height:3px;opacity:0.3} 25%{height:var(--h,14px);opacity:1} 50%{height:3px;opacity:0.3} }
+        #core.hablando .barra:nth-child(1), #core.hablando .barra:nth-child(2) { animation-delay: 0s; --h: 14px; }
+        #core.hablando .barra:nth-child(3), #core.hablando .barra:nth-child(4) { animation-delay: 0.4s; --h: 20px; }
+        #core.hablando .barra:nth-child(5), #core.hablando .barra:nth-child(6) { animation-delay: 0.8s; --h: 10px; }
+        #core.hablando .barra:nth-child(7), #core.hablando .barra:nth-child(8) { animation-delay: 1.2s; --h: 17px; }
+        #core.ejecutando .estado-texto, #core.ejecutando .barra { color: var(--c-work); }
+        #core.ejecutando .aura { animation: ap-y 0.7s infinite; }
+        @keyframes ap-y { 0%,100%{box-shadow:0 0 15px rgba(241,196,15,0.08)} 50%{box-shadow:0 0 55px rgba(241,196,15,0.32)} }
+        #core.ejecutando .logo-svg { animation: work-breath 0.9s ease-in-out infinite alternate; }
+        #core.ejecutando .logo-svg path { stroke: var(--c-work); }
+        @keyframes work-breath { from{transform:scale(0.94);opacity:0.6} to{transform:scale(1.05);opacity:1} }
+        #core.ejecutando .barra { animation: eq-load 1.6s infinite; }
+        @keyframes eq-load { 0%{height:3px;opacity:0.2} 20%{height:18px;opacity:1} 40%,100%{height:3px;opacity:0.2} }
+        #core.ejecutando .barra:nth-child(1){animation-delay:0s} #core.ejecutando .barra:nth-child(2){animation-delay:0.2s}
+        #core.ejecutando .barra:nth-child(3){animation-delay:0.4s} #core.ejecutando .barra:nth-child(4){animation-delay:0.6s}
+        #core.ejecutando .barra:nth-child(5){animation-delay:0.8s} #core.ejecutando .barra:nth-child(6){animation-delay:1s}
+        #core.ejecutando .barra:nth-child(7){animation-delay:1.2s} #core.ejecutando .barra:nth-child(8){animation-delay:1.4s}
+        .p2-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 24px 20px 24px 58px;
+        }
+        .header-left { display: flex; align-items: center; gap: 8px; }
+        .punto-verde {
+            width: 6px; height: 6px; border-radius: 50%;
+            background: #2ecc71; box-shadow: 0 0 5px #2ecc71; animation: dpulse 2s infinite;
+        }
+        @keyframes dpulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        .sys-title { font-size: 9px; letter-spacing: 3px; color: #5d8aa8; text-transform: uppercase; } /* Antes #2a4a5a */
+        .sys-clock { font-size: 9px; color: #4da8da; }
+        .logs-area { flex: 1; overflow-y: auto; padding: 0 20px 20px 20px; font-size: 10px; line-height: 1.9; letter-spacing: 0.3px; }
+        .log-line { display: flex; gap: 10px; }
+        .log-ts { color: #3a8a5a; flex-shrink: 0; }
+        .log-msg { color: #888; word-break: break-all; }
+        .log-msg { color: #a3c2c2; word-break: break-all; }
+        .log-tag { font-weight: bold; letter-spacing: 1px; }
         
-        .dropdown-options div:hover { background-color: var(--core-escuchar); color: white; }
-
-        .selector-modo:hover { border-color: var(--core-escuchar); box-shadow: 0 0 10px rgba(52, 152, 219, 0.2); }
-        .selector-modo:focus { border-color: var(--core-pensar); }
-
-        @keyframes temblor-peligro {
-            0% { transform: rotate(0deg); }
-            25% { transform: rotate(-12deg); }
-            50% { transform: rotate(12deg); }
-            75% { transform: rotate(-12deg); }
-            100% { transform: rotate(0deg); }
-        }
+        .log-tag.ok, .log-tag.boot { color: #39ff14; text-shadow: 0 0 5px #39ff14; } 
+        .log-tag.sys, .log-tag.info { color: #00ffff; text-shadow: 0 0 5px #00ffff; }
+        .log-tag.stt, .log-tag.warn { color: #ffcc00; text-shadow: 0 0 5px #ffcc00; } 
+        .log-tag.err, .log-tag.error, .log-tag.mic { color: #ff0033; text-shadow: 0 0 8px #ff0033; }
+        .log-tag.tts, .log-tag.voz { color: #cc00ff; text-shadow: 0 0 5px #cc00ff; }
+        .log-tag.llm { color: #00ff99; text-shadow: 0 0 5px #00ff99; } 
         
-        @keyframes salto-clip {
-            0% { transform: translateY(0); }
-            50% { transform: translateY(-5px) scale(1.1); }
-            100% { transform: translateY(0); }
+        .log-msg.sep { color: #1a2830; }
+        .prompt-user { color: #4da8da; margin-right: 6px; font-weight: bold; }
+        .cursor {
+            display: inline-block; width: 7px; height: 11px;
+            background: #2ecc71; animation: blink-step 0.8s step-end infinite;
+            vertical-align: middle; margin-left: 4px;
         }
-
-        @keyframes latido-suave {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.15); }
-            100% { transform: scale(1); }
+        @keyframes blink-step { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+        .res-panel {
+            flex-shrink: 0; border-top: 1px solid #0f0f0f; display: grid;
+            grid-template-columns: repeat(3, 1fr); padding: 15px 20px; gap: 15px;
         }
-
-        .input-wrapper { display: flex; flex-direction: column; background: #161616; padding: 12px 20px 25px; gap: 10px; border-top: 1px solid #222; }
-        
-        .toolbar { display: flex; gap: 12px; justify-content: flex-start; padding-left: 5px; }
-        .btn-util { width: 40px; height: 40px; background: transparent; border: none; cursor: pointer; transition: 0.3s; opacity: 0.6; display: flex; justify-content: center; align-items: center; }
-        .btn-util:hover { opacity: 1; transform: translateY(-2px); }
-        .btn-util svg { width: 22px; height: 22px; fill: #aaa; }
-        .btn-util.activo svg { fill: #e74c3c; }
-
-        #btn-clear:hover svg {
-            animation: temblor-peligro 0.4s ease-in-out;
-            fill: #e74c3c;
-        }
-
-        #btn-file:hover svg {
-            animation: salto-clip 0.4s ease-in-out;
-            fill: var(--core-escuchar);
-        }
-
-        #btn-mute:not(.activo):hover svg {
-            animation: latido-suave 0.4s ease-in-out;
-            fill: #e67e22;
-        }
-
-        .btn-util:active {
-            transform: scale(0.85) translateY(2px) !important;
-            transition: all 0.1s;
-        }
-
-        .btn-util.activo svg { fill: #e74c3c; }
-
-        .input-row { display: flex; gap: 10px; align-items: center; width: 100%; }
-        input[type="text"] { flex: 1; padding: 16px 22px; background: #222; border: 1px solid #333; border-radius: 35px; color: #fff; outline: none; transition: 0.3s; font-size: 14px; }
-        input[type="text"]:focus { border-color: var(--core-escuchar); box-shadow: 0 0 10px rgba(52, 152, 219, 0.2); }
-
-        .btn-circular { width: 45px; height: 45px; border-radius: 50%; background: #333; border: 1px solid #444; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.3s; flex-shrink: 0; }
-        .btn-circular:hover { background: #444; }
-        .btn-circular:disabled { opacity: 0.5; cursor: not-allowed; }
-        .btn-circular svg { width: 20px; height: 20px; fill: white; }
-        
-        .btn-mic.activo { background: var(--core-escuchar); box-shadow: 0 0 15px var(--core-escuchar); border-color: var(--core-escuchar); }
-
-        @keyframes alerta-mute {
-            0% { box-shadow: 0 0 0 0 rgba(192, 57, 43, 0.7); }
-            70% { box-shadow: 0 0 0 10px rgba(192, 57, 43, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(192, 57, 43, 0); }
-        }
-        .btn-mute.activo { background: #c0392b !important; border-color: #e74c3c !important; animation: alerta-mute 2s infinite; }
-
-        .equalizer { display: none; height: 20px; gap: 3px; align-items: flex-end; margin-left: 10px; }
-        .equalizer.activo { display: flex; }
-        .equalizer span { width: 3px; background: var(--core-hablar); border-radius: 2px; animation: eq 0.5s infinite alternate ease-in-out; }
-        .equalizer span:nth-child(1) { animation-duration: 0.45s; }
-        .equalizer span:nth-child(2) { animation-duration: 0.2s; }
-        .equalizer span:nth-child(3) { animation-duration: 0.55s; }
-        .equalizer span:nth-child(4) { animation-duration: 0.3s; }
-        .equalizer span:nth-child(5) { animation-duration: 0.4s; }
-        .equalizer span:nth-child(6) { animation-duration: 0.28s; }
-        .equalizer span:nth-child(7) { animation-duration: 0.57s; }
-        .equalizer span:nth-child(8) { animation-duration: 0.35s; }
-        .equalizer span:nth-child(9) { animation-duration: 0.49s; }
-        .equalizer span:nth-child(10) { animation-duration: 0.33s; }
-        @keyframes eq { from { height: 4px; } to { height: 22px; } }
+        .res-col { display: flex; flex-direction: column; gap: 4px; }
+        .res-top { display: flex; justify-content: space-between; font-size: 9px; }
+        .res-label { color: #a0a0a0; text-transform: uppercase; }        .c-cpu { color: #f1c40f; } .c-ram { color: #3498db; } .c-disk { color: #546e7a; }
+        .res-bar-bg { width: 100%; height: 3px; background: #111; }
+        .res-bar-fill { height: 100%; transition: width 0.3s; }
+        .res-spark { width: 100px; height: 20px; opacity: 0.6; align-self: flex-start; margin-top: 2px;}
     </style>
 </head>
 <body>
-    <div class="chat-container">
-        <div class="header">
-            <div class="logo-wrapper"><img src="/static/Logo_sin_fondo.png" class="logo-cronos"></div>
-            <div class="status-dot reposo" id="estado-led"></div>
-            <span>CronOS</span>
-            <div class="equalizer" id="equalizer">
-                <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+    <div id="pantalla1">
+        <canvas id="btn-p1" class="btn-flotante" width="34" height="34"></canvas>
+        <div class="corner tl"></div><div class="corner tr"></div>
+        <div class="corner bl"></div><div class="corner br"></div>
+        <div class="badge-modelo">QWEN2.5:3B</div>
+        <div class="badge-version">CRONOS v1.2</div>
+        <div class="core-container" id="core" class="reposo">
+            <div class="logo-tactil" id="logo-btn" onclick="activarEscucha()">
+                <div class="aura"></div>
+                <svg class="logo-svg" viewBox="0 0 1080 1080" preserveAspectRatio="xMidYMid meet">
+                <path d="M803.122131,678.134399 C799.636902,687.975769 796.987671,697.826599 792.542236,706.786194 C759.781982,772.813904 706.772156,812.420776 633.866211,822.331604 C569.891174,831.028259 513.710205,811.513062 466.372559,767.373047 C448.500153,750.707947 434.599396,731.083252 423.892731,709.157471 C421.293671,703.835022 419.160675,703.305725 413.155121,704.107849 C375.221985,709.174744 337.804382,709.435059 301.947693,692.838379 C294.222504,689.262573 287.353271,685.151184 282.108063,678.511475 C280.801941,676.858032 279.937012,674.852234 278.897522,672.992676 C210.224731,550.142517 282.968323,397.166199 421.491608,373.311005 C430.168610,371.816742 439.020935,371.164062 447.822662,370.646332 C452.144989,370.392059 454.644714,369.247772 456.369354,364.896393 C466.779968,338.629486 480.933960,314.377136 497.847992,291.836853 C508.523102,277.610718 521.741455,265.652710 535.206421,254.065201 C536.129028,253.271271 537.621765,252.874542 538.885437,252.781418 C566.570679,250.741013 594.224487,250.407394 621.055786,258.812164 C703.263672,284.563385 752.796692,340.011230 767.859863,424.693542 C776.687134,474.318481 766.091125,521.082642 739.664978,564.052856 C737.022522,568.349731 737.693359,570.719666 740.894287,574.323792 C758.974304,594.681580 777.179504,615.091736 788.692566,640.128784 C794.290100,652.301392 798.363220,665.174927 803.122131,678.134399 M614.389282,359.534546 C613.195557,357.536255 611.780640,355.636414 610.841370,353.524902 C597.274292,323.027039 579.899292,295.198059 554.490234,273.005615 C549.680420,268.804718 544.645874,264.861176 539.458130,260.587219 C536.375977,263.808044 533.872864,267.015717 530.801331,269.528564 C519.014404,279.171417 509.140015,290.544281 500.452423,302.934845 C487.442383,321.490143 476.471222,341.206665 466.950836,361.801575 C459.089630,378.807220 454.632996,396.409271 454.857422,415.140564 C455.094910,434.965607 455.239380,454.795898 455.865112,474.609985 C456.087738,481.658478 457.603180,488.666138 458.451477,495.108093 C476.615479,492.017242 493.787262,488.707153 511.078705,486.233704 C547.091797,481.082123 582.513245,484.598114 617.358521,494.679108 C624.415039,496.720612 624.305176,496.786255 625.851501,489.502380 C629.272766,473.386475 629.077271,457.199188 628.061096,440.820496 C626.363708,413.460815 623.187012,386.437042 614.389282,359.534546 M461.207703,534.408569 C458.290375,525.286804 455.373047,516.165100 452.397278,506.860596 C438.568542,510.106262 426.566956,515.919983 415.106964,523.107605 C385.196594,541.867126 357.583832,563.071167 335.402100,591.109070 C315.635223,616.094666 301.427277,643.767883 290.583344,673.453247 C289.479218,676.475891 290.120209,678.005676 293.033356,679.183350 C301.654388,682.668701 310.113953,686.571106 318.811188,689.847046 C343.248566,699.051636 368.646637,699.225525 394.227112,697.440125 C400.823792,696.979736 407.579712,697.483276 414.006775,696.231384 C422.755096,694.527405 431.326599,691.781311 439.853088,689.098083 C465.348236,681.075134 489.462585,669.755493 513.052612,657.368225 C520.990540,653.200012 528.147217,647.544006 535.343445,642.778259 C525.956177,632.958252 516.803101,624.240845 508.677887,614.652466 C499.802490,604.178833 491.520599,593.150208 483.629608,581.907532 C473.615112,567.639465 467.540985,551.360352 461.207703,534.408569 M792.754272,682.031006 C793.225220,680.630615 794.385254,679.029236 794.045715,677.865295 C792.698059,673.244690 790.863464,668.767395 789.242493,664.225098 C781.913025,643.687073 771.768555,624.711182 757.702759,607.969666 C748.255188,596.724976 738.997437,585.281372 728.938843,574.600952 C719.859558,564.960327 710.159546,555.825867 700.109497,547.194458 C680.671326,530.500122 658.891174,517.603821 634.653442,509.006104 C632.264343,508.158630 630.387573,507.112305 629.359863,510.697723 C627.620361,516.765991 625.958740,522.905640 623.564148,528.727173 C617.562561,543.317932 612.422302,558.462158 604.655334,572.083618 C591.048279,595.947388 573.696716,617.222229 553.906311,636.384705 C552.153015,638.082397 550.031555,639.399902 547.911804,641.023682 C562.202698,653.692139 577.543213,661.519287 592.924866,669.347595 C619.279907,682.760498 646.611694,692.821777 676.310730,695.754761 C715.858704,699.660400 754.440552,695.857178 792.754272,682.031006 M639.665222,814.522400 C673.988647,809.109497 704.736450,795.545959 731.797058,773.776550 C758.850220,752.013184 778.889404,725.106689 791.955078,691.786804 C782.431580,694.528320 774.233521,697.211548 765.876038,699.236816 C733.585266,707.062195 700.952637,707.689209 668.097961,703.589050 C665.896851,703.314392 663.048340,704.003235 661.262939,705.296143 C648.342896,714.653076 634.971436,723.118774 620.259583,729.489502 C591.389893,741.991028 561.443542,748.019043 529.929626,745.881836 C501.495178,743.953491 474.545197,736.943359 449.443542,723.223877 C445.630127,721.139526 441.625488,719.405090 436.609558,716.976257 C470.292511,777.928894 546.987305,828.823792 639.665222,814.522400 M717.675049,458.889130 C718.338440,460.593231 718.884949,462.354279 719.683105,463.992706 C728.213745,481.504242 733.426331,500.016998 736.078857,519.247253 C737.378845,528.672058 738.126770,538.173035 739.170349,548.074219 C771.881165,490.701782 774.799500,402.728027 720.860840,334.012665 C700.621643,308.228912 675.610718,288.504242 645.594604,275.287872 C615.793274,262.166046 584.647766,256.556122 551.603638,258.414154 C561.559937,268.028259 571.780640,276.226654 579.949097,286.119507 C599.317932,309.577209 614.108398,335.878357 624.834106,364.423706 C625.621155,366.518097 627.410217,368.636963 629.306519,369.844421 C637.686646,375.180206 646.484436,379.874329 654.746399,385.378113 C671.183594,396.328003 685.241638,409.966400 696.740906,425.964294 C704.174133,436.305359 710.478882,447.457581 717.675049,458.889130 M435.127167,377.957001 C430.514648,378.613983 425.878296,379.136414 421.293060,379.947601 C306.234650,400.302673 234.134354,516.570679 267.014984,628.742249 C270.997833,642.329651 276.174103,655.434448 283.350677,667.938599 C287.744629,657.512207 291.617493,647.252319 296.315125,637.385010 C308.252960,612.309387 323.915314,589.722595 342.746887,569.291931 C344.158356,567.760620 344.674591,564.871094 344.627228,562.633728 C344.511292,557.157166 343.192139,551.660583 343.469299,546.228821 C344.809540,519.965454 349.235016,494.376038 359.767639,469.977692 C375.964294,432.458801 400.788696,402.354767 435.045837,380.034393 C435.564392,379.696533 435.634521,378.670471 435.127167,377.957001 M475.815002,547.562012 C479.770599,555.806519 483.172272,564.376221 487.784821,572.235107 C502.031952,596.509277 521.215271,616.718689 541.691223,636.073120 C544.265320,633.918152 547.120056,632.073730 549.285034,629.620667 C558.280457,619.427979 567.709534,609.525635 575.765076,598.619812 C585.306213,585.702820 594.944885,572.533813 602.064514,558.240234 C609.727234,542.856445 614.455383,526.018494 620.617065,509.873413 C621.931152,506.430115 621.323486,504.662231 617.606384,503.877686 C603.782104,500.959991 590.078064,497.337952 576.151855,495.065765 C543.752319,489.779572 511.735748,494.095917 479.886505,500.233063 C473.733246,501.418793 467.646271,502.948639 460.450775,504.561340 C465.603638,519.121033 470.518646,533.008850 475.815002,547.562012 M477.054932,684.376587 C461.872894,690.123352 446.690857,695.870178 431.742981,701.528320 C455.185394,720.747253 502.924591,742.050415 560.394653,736.412720 C593.691040,733.146301 623.922363,721.564026 651.670410,701.421204 C611.431946,689.691223 574.609863,673.493958 542.148804,648.121948 C541.508362,648.465210 540.747009,648.805115 540.056458,649.253845 C529.668213,656.004089 519.596680,663.315979 508.818085,669.369568 C498.852448,674.966553 488.131805,679.219177 477.054932,684.376587 M719.225952,486.436005 C703.334290,439.556549 673.418884,404.466766 629.930176,379.818512 C635.510010,419.810608 642.473450,459.027039 632.905396,499.032715 C669.944214,511.261688 700.654724,533.307800 728.568726,560.149048 C730.758240,534.908813 727.253723,510.773773 719.225952,486.436005 M377.770294,453.274384 C359.493103,485.791016 350.756073,520.490051 352.817200,558.630432 C382.951874,533.013794 412.828217,509.350464 449.760834,497.811462 C443.563751,459.146240 445.466187,420.724304 449.552032,381.583862 C419.029388,398.822937 395.241180,422.346405 377.770294,453.274384 z"/>
+                <path d="M614.542236,359.890320 C623.187012,386.437042 626.363708,413.460815 628.061096,440.820496 C629.077271,457.199188 629.272766,473.386475 625.851501,489.502380 C624.305176,496.786255 624.415039,496.720612 617.358521,494.679108 C582.513245,484.598114 547.091797,481.082123 511.078705,486.233704 C493.787262,488.707153 476.615479,492.017242 458.451477,495.108093 C457.603180,488.666138 456.087738,481.658478 455.865112,474.609985 C455.239380,454.795898 455.094910,434.965607 454.857422,415.140564 C454.632996,396.409271 459.089630,378.807220 466.950836,361.801575 C476.471222,341.206665 487.442383,321.490143 500.452423,302.934845 C509.140015,290.544281 519.014404,279.171417 530.801331,269.528564 C533.872864,267.015717 536.375977,263.808044 539.458130,260.587219 C544.645874,264.861176 549.680420,268.804718 554.490234,273.005615 C579.899292,295.198059 597.274292,323.027039 610.841370,353.524902 C611.780640,355.636414 613.195557,357.536255 614.542236,359.890320 z"/>
+                <path d="M461.320465,534.785156 C467.540985,551.360352 473.615112,567.639465 483.629608,581.907532 C491.520599,593.150208 499.802490,604.178833 508.677887,614.652466 C516.803101,624.240845 525.956177,632.958252 535.343445,642.778259 C528.147217,647.544006 520.990540,653.200012 513.052612,657.368225 C489.462585,669.755493 465.348236,681.075134 439.853088,689.098083 C431.326599,691.781311 422.755096,694.527405 414.006775,696.231384 C407.579712,697.483276 400.823792,696.979736 394.227112,697.440125 C368.646637,699.225525 343.248566,699.051636 318.811188,689.847046 C310.113953,686.571106 301.654388,682.668701 293.033356,679.183350 C290.120209,678.005676 289.479218,676.475891 290.583344,673.453247 C301.427277,643.767883 315.635223,616.094666 335.402100,591.109070 C357.583832,563.071167 385.196594,541.867126 415.106964,523.107605 C426.566956,515.919983 438.568542,510.106262 452.397278,506.860596 C455.373047,516.165100 458.290375,525.286804 461.320465,534.785156 z"/>
+                <path d="M792.336060,682.156372 C754.440552,695.857178 715.858704,699.660400 676.310730,695.754761 C646.611694,692.821777 619.279907,682.760498 592.924866,669.347595 C577.543213,661.519287 562.202698,653.692139 547.911804,641.023682 C550.031555,639.399902 552.153015,638.082397 553.906311,636.384705 C573.696716,617.222229 591.048279,595.947388 604.655334,572.083618 C612.422302,558.462158 617.562561,543.317932 623.564148,528.727173 C625.958740,522.905640 627.620361,516.765991 629.359863,510.697723 C630.387573,507.112305 632.264343,508.158630 634.653442,509.006104 C658.891174,517.603821 680.671326,530.500122 700.109497,547.194458 C710.159546,555.825867 719.859558,564.960327 728.938843,574.600952 C738.997437,585.281372 748.255188,596.724976 757.702759,607.969666 C771.768555,624.711182 781.913025,643.687073 789.242493,664.225098 C790.863464,668.767395 792.698059,673.244690 794.045715,677.865295 C794.385254,679.029236 793.225220,680.630615 792.336060,682.156372 z"/>
+                <path d="M639.228394,814.594177 C546.987305,828.823792 470.292511,777.928894 436.609558,716.976257 C441.625488,719.405090 445.630127,721.139526 449.443542,723.223877 C474.545197,736.943359 501.495178,743.953491 529.929626,745.881836 C561.443542,748.019043 591.389893,741.991028 620.259583,729.489502 C634.971436,723.118774 648.342896,714.653076 661.262939,705.296143 C663.048340,704.003235 665.896851,703.314392 668.097961,703.589050 C700.952637,707.689209 733.585266,707.062195 765.876038,699.236816 C774.233521,697.211548 782.431580,694.528320 791.955078,691.786804 C778.889404,725.106689 758.850220,752.013184 731.797058,773.776550 C704.736450,795.545959 673.988647,809.109497 639.228394,814.594177 z"/>
+                <path d="M717.482178,458.567719 C710.478882,447.457581 704.174133,436.305359 696.740906,425.964294 C685.241638,409.966400 671.183594,396.328003 654.746399,385.378113 C646.484436,379.874329 637.686646,375.180206 629.306519,369.844421 C627.410217,368.636963 625.621155,366.518097 624.834106,364.423706 C614.108398,335.878357 599.317932,309.577209 579.949097,286.119507 C571.780640,276.226654 561.559937,268.028259 551.603638,258.414154 C584.647766,256.556122 615.793274,262.166046 645.594604,275.287872 C675.610718,288.504242 700.621643,308.228912 720.860840,334.012665 C774.799500,402.728027 771.881165,490.701782 739.170349,548.074219 C738.126770,538.173035 737.378845,528.672058 736.078857,519.247253 C733.426331,500.016998 728.213745,481.504242 719.683105,463.992706 C718.884949,462.354279 718.338440,460.593231 717.482178,458.567719 z"/>
+                <path d="M435.520569,377.961304 C435.634521,378.670471 435.564392,379.696533 435.045837,380.034393 C400.788696,402.354767 375.964294,432.458801 359.767639,469.977692 C349.235016,494.376038 344.809540,519.965454 343.469299,546.228821 C343.192139,551.660583 344.511292,557.157166 344.627228,562.633728 C344.674591,564.871094 344.158356,567.760620 342.746887,569.291931 C323.915314,589.722595 308.252960,612.309387 296.315125,637.385010 C291.617493,647.252319 287.744629,657.512207 283.350677,667.938599 C276.174103,655.434448 270.997833,642.329651 267.014984,628.742249 C234.134354,516.570679 306.234650,400.302673 421.293060,379.947601 C425.878296,379.136414 430.514648,378.613983 435.520569,377.961304 z"/>
+                <path d="M475.624329,547.229370 C470.518646,533.008850 465.603638,519.121033 460.450775,504.561340 C467.646271,502.948639 473.733246,501.418793 479.886505,500.233063 C511.735748,494.095917 543.752319,489.779572 576.151855,495.065765 C590.078064,497.337952 603.782104,500.959991 617.606384,503.877686 C621.323486,504.662231 621.931152,506.430115 620.617065,509.873413 C614.455383,526.018494 609.727234,542.856445 602.064514,558.240234 C594.944885,572.533813 585.306213,585.702820 575.765076,598.619812 C567.709534,609.525635 558.280457,619.427979 549.285034,629.620667 C547.120056,632.073730 544.265320,633.918152 541.691223,636.073120 C521.215271,616.718689 502.031952,596.509277 487.784821,572.235107 C483.172272,564.376221 479.770599,555.806519 475.624329,547.229370 z"/>
+                <path d="M477.399292,684.220215 C488.131805,679.219177 498.852448,674.966553 508.818085,669.369568 C519.596680,663.315979 529.668213,656.004089 540.056458,649.253845 C540.747009,648.805115 541.508362,648.465210 542.148804,648.121948 C574.609863,673.493958 611.431946,689.691223 651.670410,701.421204 C623.922363,721.564026 593.691040,733.146301 560.394653,736.412720 C502.924591,742.050415 455.185394,720.747253 431.742981,701.528320 C446.690857,695.870178 461.872894,690.123352 477.399292,684.220215 z"/>
+                <path d="M719.390564,486.797119 C727.253723,510.773773 730.758240,534.908813 728.568726,560.149048 C700.654724,533.307800 669.944214,511.261688 632.905396,499.032715 C642.473450,459.027039 635.510010,419.810608 629.930176,379.818512 C673.418884,404.466766 703.334290,439.556549 719.390564,486.797119 z"/>
+                <path d="M377.912140,452.934906 C395.241180,422.346405 419.029388,398.822937 449.552032,381.583862 C445.466187,420.724304 443.563751,459.146240 449.760834,497.811462 C412.828217,509.350464 382.951874,533.013794 352.817200,558.630432 C350.756073,520.490051 359.493103,485.791016 377.912140,452.934906 z"/>
+                </svg>
             </div>
-        </div>
-        <div class="chat-box" id="chat-box"><div class="mensaje cronos">CronOS operativo.</div></div>
-        <div class="controls">
-            <div class="custom-dropdown" id="menu-modos">
-                <div class="dropdown-selected" id="modo-actual" onclick="toggleDropdown()">Normal</div>
-                <div class="dropdown-options" id="dropdown-options">
-                    <div onclick="selectOption('normal', 'Normal')">Normal</div>
-                    <div onclick="selectOption('estudio', 'Estudio')">Estudio</div>
-                    <div onclick="selectOption('codigo', 'Código')">Código</div>
-                </div>
-                <input type="hidden" id="modo" value="normal">
-            </div>
-        </div>        
-        <div class="input-wrapper">
-            <div class="toolbar">
-                <button class="btn-util" id="btn-file" title="Subir Archivo" onclick="document.getElementById('file').click()">
-                    <svg viewBox="0 0 24 24"><path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5a2.5 2.5 0 015 0v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5a2.5 2.5 0 005 0V5c0-2.21-1.79-4-4-4s-4 1.79-4 4v12.5c0 3.31 2.69 6 6 6s6-2.69 6-6V6h-1.5z"/></svg>
-                </button>
-                <input type="file" id="file" hidden onchange="subir(event)">
-                
-                <button class="btn-util btn-mute" id="btn-mute" title="Silenciar Voz" onclick="alternarSilencio()">
-                    <svg viewBox="0 0 24 24" id="icon-mute"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
-                </button>
-                
-                <button class="btn-util" id="btn-clear" title="Limpiar Memoria" onclick="limpiarChat()">
-                    <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-                </button>
-            </div>
+
+            <div id="btn-cancelar" onclick="cancelarEscucha()">CANCELAR ESCUCHA</div>
             
-            <div class="input-row">
-                <button class="btn-circular btn-mic" id="btn-mic" title="Dictado por Voz" onclick="alternarMic()">
-                    <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
-                </button>
-                
-                <input type="text" id="msg" placeholder="Escribe aqui..." onkeypress="if(event.key=='Enter')enviar()">
-                
-                <button class="btn-circular" id="btn-send" title="Enviar Mensaje" onclick="enviar()">
-                    <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-                </button>
+            <div class="info-container">
+                <div class="estado-texto" id="estado-label">REPOSO</div>
+                <div class="ecualizador">
+                    <div class="barra"></div><div class="barra"></div>
+                    <div class="barra"></div><div class="barra"></div>
+                    <div class="barra"></div><div class="barra"></div>
+                    <div class="barra"></div><div class="barra"></div>
+                </div>
             </div>
         </div>
     </div>
-
+    <div id="pantalla2">
+        <canvas id="btn-p2" class="btn-flotante" width="34" height="34"></canvas>
+        <div class="p2-header">
+            <div class="header-left">
+                <div class="punto-verde"></div>
+                <div class="sys-title">CronOS · Sistema</div>
+            </div>
+            <div class="sys-clock" id="reloj">00:00:00</div>
+        </div>
+        <div class="logs-area" id="logs-container">
+            <div id="cursor-line"><span class="cursor"></span></div>
+        </div>
+        <div class="res-panel">
+            <div class="res-col">
+                <div class="res-top"><span class="res-label">CPU</span><span class="c-cpu" id="val-cpu">0%</span></div>
+                <div class="res-bar-bg"><div class="res-bar-fill c-cpu" style="width:0%" id="bar-cpu"></div></div>
+                <canvas class="res-spark" id="spark-cpu" width="100" height="20"></canvas>
+            </div>
+            <div class="res-col">
+                <div class="res-top"><span class="res-label">RAM</span><span class="c-ram" id="val-ram">0GB</span></div>
+                <div class="res-bar-bg"><div class="res-bar-fill c-ram" style="width:0%" id="bar-ram"></div></div>
+                <canvas class="res-spark" id="spark-ram" width="100" height="20"></canvas>
+            </div>
+            <div class="res-col">
+                <div class="res-top"><span class="res-label">DISK</span><span class="c-disk" id="val-disk">0GB</span></div>
+                <div class="res-bar-bg"><div class="res-bar-fill c-disk" style="width:0%" id="bar-disk"></div></div>
+                <canvas class="res-spark" id="spark-disk" width="100" height="20"></canvas>
+            </div>
+        </div>
+    </div>
     <script>
-        const chat = document.getElementById("chat-box");
-        const input = document.getElementById("msg");
-        const led = document.getElementById("estado-led");
-        const eq = document.getElementById("equalizer");
-        const btnFile = document.getElementById("btn-file");
-        const btnMic = document.getElementById("btn-mic");
-        const btnSend = document.getElementById("btn-send");
-        const btnMute = document.getElementById("btn-mute");
-        const iconMute = document.getElementById("icon-mute");
-        
-        let modoSilencio = false;
-
-        function setStatus(s) { led.className = `status-dot ${s}`; }
-        
-        function bloquearControles(bloquear) {
-            input.disabled = bloquear;
-            btnFile.disabled = bloquear;
-            btnMic.disabled = bloquear;
-            btnSend.disabled = bloquear;
-            input.style.opacity = bloquear ? "0.5" : "1";
+        const ctx1 = document.getElementById('btn-p1').getContext('2d');
+        ctx1.strokeStyle = '#4a8aaa'; ctx1.lineWidth = 1.5; ctx1.lineCap = 'round'; ctx1.lineJoin = 'round';
+        ctx1.beginPath();
+        ctx1.moveTo(10,12); ctx1.lineTo(6,17); ctx1.lineTo(10,22);
+        ctx1.moveTo(14,24); ctx1.lineTo(20,10);
+        ctx1.moveTo(24,12); ctx1.lineTo(28,17); ctx1.lineTo(24,22);
+        ctx1.stroke();
+        const ctx2 = document.getElementById('btn-p2').getContext('2d');
+        ctx2.strokeStyle = '#4a8aaa'; ctx2.lineWidth = 1.5; ctx2.lineCap = 'round'; ctx2.lineJoin = 'round';
+        ctx2.beginPath();
+        ctx2.moveTo(14,11); ctx2.lineTo(9,17); ctx2.lineTo(14,23);
+        ctx2.moveTo(9,17); ctx2.lineTo(23,17);
+        ctx2.stroke();
+        const p1 = document.getElementById('pantalla1');
+        const p2 = document.getElementById('pantalla2');
+        document.getElementById('btn-p1').addEventListener('click', () => { p1.classList.add('oculto'); p2.classList.add('activo'); });
+        document.getElementById('btn-p2').addEventListener('click', () => { p1.classList.remove('oculto'); p2.classList.remove('activo'); });
+        setInterval(() => document.getElementById('reloj').innerText = new Date().toLocaleTimeString('es-ES', {hour12:false}), 1000);
+        const core = document.getElementById('core');
+        const label = document.getElementById('estado-label');
+        function setEstado(estado) {
+            core.className = 'core-container ' + estado;
+            label.innerText = estado.toUpperCase();
         }
-
-        async function alternarSilencio() {
-            modoSilencio = !modoSilencio;
-            if (modoSilencio) {
-                iconMute.innerHTML = `<path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>`;
-                btnMute.classList.add("activo");
-                try { await fetch('/silenciar_boca', {method: 'POST'}); } catch(e) {}
-            } else {
-                iconMute.innerHTML = `<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>`;
-                btnMute.classList.remove("activo");
-            }
-        }
-
-        function typewriter(elemento, texto, i = 0) {
-            if (i < texto.length) {
-                elemento.textContent += texto.charAt(i);
-                chat.scrollTop = chat.scrollHeight;
-                setTimeout(() => typewriter(elemento, texto, i + 1), 2);
-            }
-        }
-
-        async function limpiarChat() {
-            bloquearControles(true);
-            setStatus('trabajando');
-            try {
-                await fetch('/silenciar_boca', {method: 'POST'});
-                await fetch('/limpiar_chat', {method: 'POST'});
-                chat.innerHTML = '<div class="mensaje cronos">CronOS operativo.</div>';
-            } catch(e) {}
-            setStatus('reposo');
-            bloquearControles(false);
-        }
-
-        async function enviar() {
-            const t = input.value.trim(); if(!t) return;
-            input.value = "";
-            bloquearControles(true); 
-            
-            const dU = document.createElement("div"); dU.className = "mensaje usuario"; dU.innerText = t; chat.appendChild(dU);
-            const dL = document.createElement("div"); dL.className = "mensaje cronos";
-            dL.innerHTML = `<div class="wave-loader"><span></span><span></span><span></span><span></span><span></span><span></span></div>`;
-            chat.appendChild(dL); setStatus('pensando'); chat.scrollTop = chat.scrollHeight;
-
-            try {
-                const payload = {mensaje:t, modo:document.getElementById("modo").value, silencio: modoSilencio};
-                const r = await fetch('/enviar_mensaje_stream', { 
-                    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
-                });
-                
-                const reader = r.body.getReader();
-                const decoder = new TextDecoder("utf-8");
-                let textoFinal = "";
-                
-                dL.innerHTML = "";
-                
-                while(true) {
-                    const {done, value} = await reader.read();
-                    if(done) break;
-                    
-                    const chunkStr = decoder.decode(value, {stream: true});
-                    const lineas = chunkStr.split('\n\n');
-                    
-                    for(let linea of lineas) {
-                        if(linea.startsWith('data: ')) {
-                            try {
-                                const data = JSON.parse(linea.substring(6));
-                                
-                                if(data.herramienta) {
-                                    dL.innerHTML = `<div class="work-loader"><span></span><span></span><span></span></div>`;
-                                    setStatus('trabajando');
-                                } else if(data.reemplazar) {
-                                    dL.innerText = data.texto;
-                                    textoFinal = data.texto;
-                                    if(data.accion) { 
-                                        setStatus('trabajando'); 
-                                        await new Promise(res => setTimeout(res, 1500)); 
-                                    }
-                                } else if(data.texto) {
-                                    textoFinal += data.texto;
-                                    dL.innerText = textoFinal;
-                                    chat.scrollTop = chat.scrollHeight;
-                                }
-                                
-                                if(data.fin) {
-                                    if (!modoSilencio && textoFinal) {
-                                        setStatus('hablando'); eq.classList.add("activo");
-                                        setTimeout(async () => {
-                                            await fetch('/esperar_boca');
-                                            setStatus('reposo'); eq.classList.remove('activo'); bloquearControles(false); 
-                                        }, 500);
-                                    } else {
-                                        setStatus('reposo'); bloquearControles(false);
-                                    }
-                                }
-                            } catch(e) {}
-                        }
+        function activarEscucha() {
+            fetch('/activar_escucha', {method: 'POST'})
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.ok) {
+                        const logo = document.getElementById('logo-btn');
+                        logo.style.transition = 'transform 0.08s ease-in-out';
+                        logo.style.transform = 'scale(0.88)';
+                        setTimeout(() => { logo.style.transform = 'scale(1)'; }, 160);
                     }
-                }
-            } catch(e) {
-                dL.innerText = "Error de conexión neuronal.";
-                setStatus('reposo'); bloquearControles(false);
-            }
+                })
+                .catch(e => console.error(e));
         }
 
-        async function subir(e) { 
-            bloquearControles(true);
-            const f = e.target.files[0]; 
-            const fd = new FormData(); 
-            fd.append('archivo', f);
-            setStatus('vision'); 
-            await fetch('/subir_archivo', {method:'POST', body:fd}); 
-            await new Promise(r => setTimeout(r, 2000));
-            setStatus('reposo'); 
-            const dS = document.createElement("div"); 
-            dS.className = "mensaje cronos"; 
-            dS.innerText = `Córtex visual enlazado: Archivo ${f.name} procesado exitosamente.`; 
-            chat.appendChild(dS);
-            bloquearControles(false);
+        function cancelarEscucha() {
+            console.log("Cancelando...");
+            fetch('/cancelar_escucha', {method: 'POST'})
+                .then(r => r.json())
+                .then(data => {
+                    console.log("Respuesta de cancelación:", data);
+                })
+                .catch(e => console.error("Error al cancelar:", e));
         }
-        
-        function toggleDropdown() {
-            document.getElementById("dropdown-options").classList.toggle("show");
-        }
-
-        function selectOption(valor, texto) {
-            document.getElementById("modo").value = valor;
-            document.getElementById("modo-actual").innerText = texto;
-            document.getElementById("dropdown-options").classList.remove("show");
-        }
-
-        window.onclick = function(event) {
-            if (!event.target.matches('.dropdown-selected')) {
-                const dropdowns = document.getElementsByClassName("dropdown-options");
-                for (let i = 0; i < dropdowns.length; i++) {
-                    if (dropdowns[i].classList.contains('show')) {
-                        dropdowns[i].classList.remove('show');
-                    }
-                }
-            }
-        }
-
-        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if(SR) {
-            const rec = new SR(); rec.lang = 'es-ES';
-            rec.onstart = () => { setStatus('escuchando'); btnMic.classList.add('activo'); bloquearControles(true); btnMic.disabled = false; };
-            rec.onresult = (e) => { input.value = e.results[0][0].transcript; enviar(); };
-            rec.onend = () => { btnMic.classList.remove('activo'); if(led.classList.contains('escuchando')) { setStatus('reposo'); bloquearControles(false); } };
+        const logsContainer = document.getElementById('logs-container');
+        const cursorLine = document.getElementById('cursor-line');
+        function addLog(msg, tag="SYS") {
+            const timeStr = new Date().toLocaleTimeString('es-ES', {hour12:false});
+            const div = document.createElement('div'); div.className = 'log-line';
             
-            rec.onerror = (e) => {
-                console.error("Error en el micrófono:", e.error);
-                btnMic.classList.remove('activo');
-                bloquearControles(false);
-                setStatus('reposo'); 
-            };
-
-            function alternarMic() { rec.start(); }
+            let tagClass = tag.toLowerCase();
+            if(tagClass === 'voz') tagClass = 'tts';
+            
+            let tagHtml = tag ? `<span class="log-tag ${tagClass}">[${tag}]</span>` : '';
+            div.innerHTML = msg === '──' 
+                ? `<span class="log-ts">${timeStr}</span> <span class="log-msg sep">─────────────────────────</span>`
+                : `<span class="log-ts">${timeStr}</span> <span class="prompt-user">root@cronos:~$</span> ${tagHtml} <span class="log-msg">${msg}</span>`;
+                
+            logsContainer.insertBefore(div, cursorLine);
+            logsContainer.scrollTop = logsContainer.scrollHeight;
+            const MAX_LOGS = 150;
+        while (logsContainer.children.length > MAX_LOGS + 1) {
+            logsContainer.removeChild(logsContainer.firstChild);
         }
+        }
+
+        addLog("Iniciando Núcleo CronOS v1.2...", "BOOT");
+        addLog("Conectando con Backend...", "SYS");
+
+        const history = { cpu: [], ram: [], disk: [] };
+        function drawSpark(id, data, color) {
+            const canvas = document.getElementById(id); const ctx = canvas.getContext('2d');
+            ctx.clearRect(0,0,100,20); if(data.length < 2) return;
+            ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+            const step = 100 / 19;
+            for(let i=0; i<data.length; i++) {
+                const x = i * step, y = 20 - (data[i] / 100 * 20);
+                i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+            }
+            ctx.stroke();
+        }
+
+        const evtSource = new EventSource('/estado_sistema');
+        evtSource.onmessage = function(e) {
+            try {
+                const data = JSON.parse(e.data);
+                
+                if(data.estado && !core.classList.contains(data.estado)) setEstado(data.estado);
+                
+                if(data.log) {
+                    let tag = "SYS";
+                    let msg = data.log;
+                    
+                    const match = data.log.match(/^\[(.*?)\]\s*(.*)/);
+                    if (match) {
+                        tag = match[1];
+                        msg = match[2];
+                    } else if (data.log.includes("ERROR")) {
+                        tag = "ERR";
+                    }
+
+                    addLog(msg, tag);
+                }
+
+                document.getElementById('val-cpu').innerText = data.cpu + '%';
+                document.getElementById('bar-cpu').style.width = data.cpu + '%';
+                
+                const ramPercent = Math.min((data.ram / 16) * 100, 100).toFixed(1);
+                document.getElementById('val-ram').innerText = data.ram + 'GB';
+                document.getElementById('bar-ram').style.width = ramPercent + '%';
+
+                document.getElementById('val-disk').innerText = data.disco + 'GB';
+                const discoMax = 100;
+                const discoPercent = Math.min((1 - (data.disco / discoMax)) * 100, 100).toFixed(1);
+                document.getElementById('bar-disk').style.width = discoPercent + '%';
+                
+                history.cpu.push(data.cpu); if(history.cpu.length > 20) history.cpu.shift();
+                history.ram.push(parseFloat(ramPercent)); if(history.ram.length > 20) history.ram.shift();
+                history.disk.push(parseFloat(discoPercent)); if(history.disk.length > 20) history.disk.shift();
+                
+                drawSpark('spark-cpu', history.cpu, '#f1c40f');
+                drawSpark('spark-ram', history.ram, '#3498db');
+                drawSpark('spark-disk', history.disk, '#546e7a');
+
+            } catch(err) { console.error(err); }
+        };
+        evtSource.onerror = function() {
+            if(Math.random() > 0.95) addLog("Buscando señal de servidor SSE...", "WARN");
+        };
     </script>
 </body>
 </html>

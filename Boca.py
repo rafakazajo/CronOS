@@ -5,6 +5,9 @@ import os
 import re
 import threading
 import tempfile
+import Oido
+import Cerebro
+from Estado import estado_global
 
 esta_hablando = False
 voz = "es-ES-AlvaroNeural"
@@ -67,3 +70,42 @@ def callar():
             pygame.mixer.music.stop()
             pygame.mixer.music.unload()
         esta_hablando = False
+
+def ciclo_voz():
+    try:
+        estado_global["estado"] = "escuchando"
+        estado_global["log"] = "[MIC] Escuchando..."
+        
+        texto = Oido.escuchar_y_transcribir()
+        
+        if estado_global.get("cancelar"):
+            estado_global["cancelar"] = False
+            return
+
+        if not texto:
+            estado_global["estado"] = "reposo"
+            estado_global["log"] = "[MIC] Silencio detectado."
+            return
+
+        estado_global["log"] = f"[STT] Transcrito: {texto}"
+
+        estado_global["estado"] = "pensando"
+        estado_global["log"] = "[LLM] Procesando respuesta..."
+
+        respuesta, _ = Cerebro.pensar(texto, "normal")
+
+        estado_global["log"] = f"[LLM] Respuesta lista ({len(respuesta)} chars)"
+
+        estado_global["estado"] = "hablando"
+        estado_global["log"] = "[TTS] Sintetizando voz..."
+
+        hablar(respuesta)
+
+        estado_global["log"] = "[VOZ] Reproducción completada."
+    except Exception as e:
+        estado_global["log"] = f"[ERROR] {e}"
+    finally:
+        estado_global["cancelar"] = False
+        estado_global["estado"] = "reposo"
+        estado_global["log"] = "[MIC] Esperando activación táctil..."
+        estado_global["ocupado"] = False

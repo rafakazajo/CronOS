@@ -1,0 +1,1 @@
+estado_global = {"estado": "reposo", "log": "", "ocupado": False, "cancelar": False}
